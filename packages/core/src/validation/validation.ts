@@ -19,12 +19,14 @@ import type { AddressValidationError } from "./isValidAddress";
 // Minimal translation function type to avoid i18next dependency
 export type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 
+// Number.MAX_SAFE_INTEGER (9,007,199,254,740,991) has 16 digits — the largest integer JS
+// can represent exactly. This hard cap (independent of any form-configured maxDigits) keeps
+// every accepted NumberInput value exactly representable, regardless of how it was submitted.
+export const MAX_NUMBER_INPUT_DIGITS = 15;
+
 export const isFieldResponseValid = (
   value: unknown,
-  values: Responses,
-  componentType: string,
   formElement: FormElement,
-  validator: ValidationProperties,
   t: TranslateFn
 ): string | null | Record<string, unknown>[] | AddressValidationError => {
   // Note that this will ignore a file upload since the value is an object. We could check the
@@ -32,6 +34,9 @@ export const isFieldResponseValid = (
   if (isInputTooLong(value as string)) {
     return t("input-validation.too-many-characters");
   }
+
+  const componentType = formElement.type;
+  const validator = formElement.properties.validation as ValidationProperties;
 
   switch (componentType) {
     case FormElementTypes.textField:
@@ -86,6 +91,11 @@ export const isFieldResponseValid = (
           }
 
           if (validator.maxDigits && digitCount > validator.maxDigits) {
+            return t("input-validation.too-many-digits");
+          }
+
+          // Hard cap, independent of any form-configured maxDigits
+          if (digitCount > MAX_NUMBER_INPUT_DIGITS) {
             return t("input-validation.too-many-digits");
           }
         }
@@ -199,14 +209,7 @@ export const isFieldResponseValid = (
 
         (formElement.properties.subElements || []).forEach((subElement, index) => {
           if (subElement.properties.validation) {
-            const validationError = isFieldResponseValid(
-              row[index],
-              values,
-              subElement.type,
-              subElement,
-              subElement.properties.validation,
-              t
-            );
+            const validationError = isFieldResponseValid(row[index], subElement, t);
 
             if (validationError !== null) {
               rowErrors[index] = validationError;

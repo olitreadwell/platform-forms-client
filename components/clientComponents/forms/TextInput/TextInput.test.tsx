@@ -41,7 +41,7 @@ const textInputData = {
 describe.each([["en"], ["fr"]] as Array<[Language]>)("Generate a text input", (lang: Language) => {
   afterEach(() => cleanup());
   it("renders without errors", () => {
-    render(<GenerateElement element={textInputData} language={lang} />);
+    render(<GenerateElement element={textInputData} language={lang} isTestMode={true} />);
 
     const title = (
       lang === "en" ? textInputData.properties.titleEn : textInputData.properties.titleFr
@@ -61,7 +61,8 @@ describe.each([["en"], ["fr"]] as Array<[Language]>)("Generate a text input", (l
     expect(screen.getByText(description)).toBeInTheDocument();
 
     const renderedTextBox = screen.getByRole("textbox");
-    expect(renderedTextBox).toBeRequired();
+  expect(renderedTextBox).toHaveAttribute("aria-required", "true");
+  expect(renderedTextBox).not.toHaveAttribute("required");
     expect(renderedTextBox).toHaveAccessibleDescription(description);
     expect(screen.queryByTestId("required"))!.toBeInTheDocument();
     expect(screen.getByPlaceholderText(placeholder)).toBeInTheDocument();
@@ -70,7 +71,7 @@ describe.each([["en"], ["fr"]] as Array<[Language]>)("Generate a text input", (l
 
 describe("Check attributes on rendered text input", () => {
   it("has the correct autoComplete value", () => {
-    render(<GenerateElement element={textInputData} language={"en"} />);
+    render(<GenerateElement element={textInputData} language={"en"} isTestMode={true} />);
     const textbox = screen.getByRole("textbox");
     expect(textbox.getAttribute("autoComplete")).toBe("name");
   });

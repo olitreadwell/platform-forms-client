@@ -1,7 +1,7 @@
 "use server";
 
 import { Language, FormServerErrorCodes, ServerActionError } from "@lib/types/form-builder-types";
-import { getAppSetting } from "@lib/appSettings";
+import { getAppSetting, getAppSettingAsBoolean } from "@lib/appSettings";
 import { AuditLogEvent, AuditLogDetails, logEvent } from "@lib/auditLogs";
 import { ucfirst } from "@lib/client/clientHelpers";
 import {
@@ -15,7 +15,7 @@ import {
   JSONResponse,
 } from "@lib/responseDownloadFormats/types";
 import { getFullTemplateByID } from "@lib/templates/queries/getFullTemplateByID";
-import { FormElement, FormElementTypes, StartFromExclusiveResponse, VaultStatus } from "@lib/types";
+import { StartFromExclusiveResponse, VaultStatus } from "@lib/types";
 import { isResponseId } from "@lib/validation/validation";
 import {
   confirmResponses,
@@ -35,16 +35,16 @@ import { AuthenticatedAction } from "@lib/actions";
 import { FormBuilderError } from "./exceptions";
 import { FormProperties } from "@lib/types";
 import { getLayoutFromGroups } from "@lib/utils/form-builder/groupedFormHelpers";
-import { allowGrouping } from "@root/lib/groups/utils/allowGrouping";
 import { orderGroups } from "@lib/utils/form-builder/orderUsingGroupsLayout";
 import { formHasGroups } from "@lib/utils/form-builder/formHasGroups";
-import { DateFormat, DateObject } from "@clientComponents/forms/FormattedDate/types";
-import { getFormattedDateFromObject } from "@clientComponents/forms/FormattedDate/utils";
-import { AddressElements } from "@clientComponents/forms/AddressComplete/types";
-import { getAddressAsString } from "@clientComponents/forms/AddressComplete/utils";
 import { traceFunction } from "@lib/otel";
-import { isTemplateVersioningEnabled } from "@lib/templates/versioning/internal";
-import { StarRatingObject } from "@root/components/clientComponents/forms/StarRating/types";
+import { mapAnswers } from "@lib/responses/mapper/mapAnswers";
+import type { Response } from "@gcforms/types";
+import { FeatureFlags } from "@lib/cache/types";
+import { featureFlagAllowedForUser } from "@lib/userFeatureFlags";
+import { getFormSubmissionAttachmentDownloadLink } from "@lib/vault/getFormSubmissionAttachmentDownloadLink";
+import { FormElement, FormElementTypes } from "@gcforms/types";
+import { getResponseAttachmentFilenameMapping } from "@lib/responseDownloadFormats/attachments";
 
 const IGNORED_KEYS = ["formID", "securityAttribute"];
 
@@ -112,10 +112,76 @@ export const fetchSubmissions = AuthenticatedAction(
         const { submissions, startFromExclusiveResponse: nextStartFromExclusiveResponse } =
           await listAllSubmissions(formId, selectedStatus, undefined, startFromExclusiveResponse);
 
-        return { submissions, startFromExclusiveResponse: nextStartFromExclusiveResponse };
+        // The New tab must also restrict downloads when previously downloaded responses are overdue for sign-off.
+        const oldestDownloaded =
+          selectedStatus === VaultStatus.NEW && (await getAppSettingAsBoolean("nagwareEnabled"))
+            ? await listAllSubmissions(formId, VaultStatus.DOWNLOADED, 1)
+            : null;
+
+        return {
+          submissions,
+          startFromExclusiveResponse: nextStartFromExclusiveResponse,
+          oldestDownloadedCreatedAt: oldestDownloaded?.submissions[0]?.createdAt ?? null,
+        };
       } catch (e) {
         logMessage.error(`Error fetching submissions for form ${formId}: ${(e as Error).message}`);
         return { error: true, submissions: [] };
+      }
+    });
+  }
+);
+
+const hasFileInputElement = (formElements: FormElement[]): boolean => {
+  const checkForFileInput = (elements?: FormElement[]): boolean => {
+    if (!elements) return false;
+
+    return elements.some(
+      (element) =>
+        element.type === FormElementTypes.fileInput ||
+        (element.properties?.subElements && checkForFileInput(element.properties.subElements))
+    );
+  };
+
+  return checkForFileInput(formElements);
+};
+
+export const getTemplateHasFileInput = AuthenticatedAction(
+  async (
+    session,
+    {
+      formID,
+      version,
+    }: {
+      formID: string;
+      version?: ResponseVersion;
+    }
+  ) => {
+    return traceFunction("getTemplateHasFileInput", async () => {
+      try {
+        const templateVersionNumber = parseTemplateVersionNumber(version) ?? undefined;
+
+        if (version && templateVersionNumber === undefined) {
+          throw new FormBuilderError(`Invalid template version: ${version}`);
+        }
+
+        let fullFormTemplate = await getFullTemplateByID(formID, undefined, templateVersionNumber);
+
+        // Mirror getSubmissionsByFormat: version 1 may predate versioned templates.
+        if (fullFormTemplate === null && templateVersionNumber === 1) {
+          fullFormTemplate = await getFullTemplateByID(formID);
+        }
+
+        if (fullFormTemplate === null) {
+          logMessage.warn(`getTemplateHasFileInput form not found: ${formID}`);
+          throw new FormBuilderError("Form not found", FormServerErrorCodes.FORM_NOT_FOUND);
+        }
+
+        return hasFileInputElement(fullFormTemplate.form.elements);
+      } catch (e) {
+        logMessage.error(
+          `Error fetching template version for form ${formID}: ${(e as Error).message}`
+        );
+        return;
       }
     });
   }
@@ -130,12 +196,21 @@ export const getSubmissionsByFormat = AuthenticatedAction(
       format = DownloadFormat.HTML,
       lang,
       version,
+      // Queue callers fetch response content and short-lived attachment links separately.
+      includeAttachments = true,
+      includeResponses = true,
+      includeCsvHeader = true,
+      trackDownload = true,
     }: {
       formID: string;
       ids: string[];
       format: DownloadFormat;
       lang: Language;
       version?: ResponseVersion;
+      includeAttachments?: boolean;
+      includeResponses?: boolean;
+      includeCsvHeader?: boolean;
+      trackDownload?: boolean;
     }
   ): Promise<
     | HtmlResponse
@@ -149,12 +224,9 @@ export const getSubmissionsByFormat = AuthenticatedAction(
       try {
         const responseConfirmLimit = Number(await getAppSetting("responseDownloadLimit"));
 
-        const templateVersioningEnabled = await isTemplateVersioningEnabled();
-        const templateVersionNumber = templateVersioningEnabled
-          ? parseTemplateVersionNumber(version)
-          : undefined;
+        const templateVersionNumber = parseTemplateVersionNumber(version) ?? undefined;
 
-        if (templateVersioningEnabled && version && templateVersionNumber === undefined) {
+        if (version && templateVersionNumber === undefined) {
           throw new FormBuilderError(
             `Invalid response version: ${version}`,
             FormServerErrorCodes.DOWNLOAD_INVALID_FORMAT
@@ -168,7 +240,7 @@ export const getSubmissionsByFormat = AuthenticatedAction(
         // Fallback: only allow fallback to non-versioned template when version 1
         // was requested. This covers the case where responses were collected
         // before any versions were created and the UI requests version 1.
-        if (fullFormTemplate === null && templateVersioningEnabled && templateVersionNumber === 1) {
+        if (fullFormTemplate === null && templateVersionNumber === 1) {
           fullFormTemplate = await getFullTemplateByID(formID);
         }
 
@@ -193,7 +265,32 @@ export const getSubmissionsByFormat = AuthenticatedAction(
           );
         }
 
-        const allowGroupsFlag = allowGrouping();
+        const fileUploadEnabled = await featureFlagAllowedForUser(
+          session.user.id,
+          FeatureFlags.fileUpload
+        );
+        // Mint links only for the current queue item, not for every selected response up front.
+        const attachments =
+          fileUploadEnabled && includeAttachments
+            ? (
+                await Promise.all(
+                  queryResult.map(async (item) => ({
+                    responseId: item.name,
+                    attachments: await Promise.all(
+                      (item.fileAttachments ?? []).map(async (attachment) => ({
+                        id: attachment.id,
+                        name: attachment.name,
+                        downloadLink: await getFormSubmissionAttachmentDownloadLink(
+                          attachment.path
+                        ),
+                        isPotentiallyMalicious: attachment.isPotentiallyMalicious,
+                      }))
+                    ),
+                  }))
+                )
+              ).filter((group) => group.attachments.length > 0)
+            : [];
+
         // Get responses into a ResponseSubmission array containing questions and answers that can be easily transformed
         const responses = queryResult
           .sort((a, b) => a.createdAt - b.createdAt)
@@ -205,83 +302,14 @@ export const getSubmissionsByFormat = AuthenticatedAction(
                 delete filteredSubmissionData[key];
               }
             });
-            const submission = Object.entries(filteredSubmissionData).map(
-              ([questionId, answer]) => {
-                const question = fullFormTemplate.form.elements.find(
-                  (element) => element.id === Number(questionId)
-                );
-
-                // Handle Dynamic Rows
-                if (question?.type === FormElementTypes.dynamicRow && answer instanceof Array) {
-                  return {
-                    questionId: question.id,
-                    type: question?.type,
-                    questionEn: question?.properties.titleEn,
-                    questionFr: question?.properties.titleFr,
-                    answer: answer.map((item) => {
-                      return Object.values(item).map((value, index) => {
-                        if (question?.properties.subElements) {
-                          // Filter out richText elements from subElements since we access them by index
-                          const subQuestions = question?.properties.subElements.filter(
-                            (subElement) => {
-                              return subElement.type !== FormElementTypes.richText;
-                            }
-                          );
-
-                          // The question does not exist for the given index.
-                          // This can happen on Draft forms when a dynamic row is modified
-                          // after a submission and the submission is subsequently downloaded.
-                          if (!subQuestions.length || !subQuestions[index]) {
-                            // If this happens on a published form, we should log it
-                            if (fullFormTemplate.isPublished) {
-                              logMessage.error(
-                                `Dynamic row submission for form ${formID} has an invalid index ${index} for subQuestions.`
-                              );
-                            }
-
-                            return {
-                              questionId: index,
-                              type: "-",
-                              questionEn: "-",
-                              questionFr: "-",
-                              answer: value as string,
-                            };
-                          }
-
-                          const subQuestion = subQuestions[index];
-
-                          return {
-                            questionId: subQuestion.id,
-                            type: subQuestion.type,
-                            questionEn: subQuestion.properties.titleEn,
-                            questionFr: subQuestion.properties.titleFr,
-                            answer: getAnswerAsString(subQuestion, value),
-                            ...(subQuestion.type === "formattedDate" && {
-                              dateFormat: subQuestion.properties.dateFormat,
-                            }),
-                          };
-                        }
-                      });
-                    }),
-                  } as Answer;
-                }
-
-                // return the final answer object
-                return {
-                  questionId: question?.id,
-                  type: question?.type,
-                  questionEn: question?.properties.titleEn,
-                  questionFr: question?.properties.titleFr,
-                  answer: getAnswerAsString(question, answer),
-                  ...(question?.type === "formattedDate" && {
-                    dateFormat: question.properties.dateFormat,
-                  }),
-                } as Answer;
-              }
-            );
+            const submission = mapAnswers({
+              formTemplate: fullFormTemplate.form,
+              rawAnswers: filteredSubmissionData as Record<string, Response>,
+              attachments: getResponseAttachmentFilenameMapping(item.fileAttachments ?? []),
+            });
 
             let sorted: Answer[];
-            if (allowGroupsFlag && formHasGroups(fullFormTemplate.form)) {
+            if (formHasGroups(fullFormTemplate.form)) {
               sorted = sortByGroups({ form: fullFormTemplate.form, elements: submission });
             } else {
               sorted = sortByLayout({ layout: fullFormTemplate.form.layout, elements: submission });
@@ -307,22 +335,28 @@ export const getSubmissionsByFormat = AuthenticatedAction(
           submissions: responses,
         } as FormResponseSubmissions;
 
-        const responseIdStatusArray = queryResult.map((item) => {
-          return {
-            id: item.name,
-            status: item.status,
-            createdAt: item.createdAt,
-          };
-        });
+        if (trackDownload) {
+          const responseIdStatusArray = queryResult.map((item) => {
+            return {
+              id: item.name,
+              status: item.status,
+              createdAt: item.createdAt,
+            };
+          });
 
-        await updateLastDownloadedBy(responseIdStatusArray, formID);
-        await logDownload(responseIdStatusArray, format, session.user.id);
+          await updateLastDownloadedBy(responseIdStatusArray, formID);
+          await logDownload(responseIdStatusArray, format, session.user.id);
+        }
 
         switch (format) {
           case DownloadFormat.CSV:
             return {
               receipt: await htmlAggregatedTransform(formResponse, lang),
-              responses: csvTransform(formResponse),
+              responses: await csvTransform(formResponse, {
+                includeHeader: includeCsvHeader,
+                includeRecords: includeResponses,
+              }),
+              ...(attachments.length > 0 && { attachments }),
             };
           case DownloadFormat.HTML_AGGREGATED:
             return await htmlAggregatedTransform(formResponse, lang);
@@ -331,13 +365,23 @@ export const getSubmissionsByFormat = AuthenticatedAction(
             return await htmlTransform(formResponse);
 
           case DownloadFormat.HTML_ZIPPED: {
-            return await zipTransform(formResponse, lang);
+            const response = includeResponses
+              ? await zipTransform(formResponse, lang)
+              : {
+                  receipt: await htmlAggregatedTransform(formResponse, lang),
+                  responses: [],
+                };
+            return {
+              ...response,
+              ...(attachments.length > 0 && { attachments }),
+            };
           }
 
           case DownloadFormat.JSON:
             return {
               receipt: await htmlAggregatedTransform(formResponse, lang),
-              responses: jsonTransform(formResponse),
+              responses: includeResponses ? jsonTransform(formResponse) : [],
+              ...(attachments.length > 0 && { attachments }),
             };
 
           default:
@@ -421,75 +465,6 @@ const sortByGroups = ({ form, elements }: { form: FormProperties; elements: Answ
   const groups = orderGroups(form.groups, form.groupsLayout) ?? {};
   const layout = getLayoutFromGroups(form, groups);
   return sortByLayout({ layout, elements });
-};
-
-const getDateAsString = (answer: DateObject | string | object, dateFormat: DateFormat): string => {
-  try {
-    if (typeof answer === "object" && "YYYY" in answer && "MM" in answer && "DD" in answer) {
-      const dateObject = answer as unknown as DateObject;
-      return getFormattedDateFromObject(dateFormat, dateObject);
-    }
-
-    const dateObject = JSON.parse(answer as string) as DateObject;
-    return getFormattedDateFromObject(dateFormat, dateObject);
-  } catch (e) {
-    return answer as string;
-  }
-};
-
-const getAnswerAsString = (question: FormElement | undefined, answer: unknown): string => {
-  if (question && question.type === "checkbox") {
-    return Array(answer).join(", ");
-  }
-
-  if (question && question.type === "fileInput") {
-    if (!answer || typeof answer !== "object" || !("name" in answer)) {
-      return ""; // If the answer is not an object or does not have a name, return empty string
-    }
-    return answer.name as string;
-  }
-
-  if (question && question.type === "formattedDate") {
-    // Could be empty if the date was not required
-    if (!answer) {
-      return "";
-    }
-
-    const dateFormat = (question.properties.dateFormat || "YYYY-MM-DD") as DateFormat;
-
-    return getDateAsString(answer, dateFormat);
-  }
-
-  if (question && question.type === "addressComplete") {
-    if (!answer) {
-      return "";
-    }
-
-    try {
-      let addressObject: AddressElements;
-
-      if (typeof answer === "string") {
-        addressObject = JSON.parse(answer) as AddressElements;
-        return getAddressAsString(
-          addressObject,
-          question.properties.addressComponents?.splitAddress
-        );
-      }
-
-      addressObject = answer as AddressElements;
-      return getAddressAsString(addressObject, question.properties.addressComponents?.splitAddress);
-    } catch (e) {
-      // If the answer is somehow not parseable as JSON, return it as is
-      return answer as string;
-    }
-  }
-
-  if (question && question.type === FormElementTypes.starRating) {
-    const starRatingObject = answer as StarRatingObject;
-    return `${starRatingObject.value}/${starRatingObject.numberOfStars}`;
-  }
-
-  return answer as string;
 };
 
 const logDownload = async (

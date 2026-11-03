@@ -9,6 +9,9 @@ import {
 } from "@gcforms/types";
 
 import { ensureChoiceId, checkVisibilityRecursive } from "@gcforms/core";
+import { inGroup } from "@gcforms/core";
+import { formHasGroups } from "@lib/utils/form-builder/formHasGroups";
+import { LOCKED_GROUPS } from "@formBuilder/components/shared/right-panel/headless-treeview/constants";
 
 /**
  * Checks if two arrays match.
@@ -299,7 +302,8 @@ export const decrementChoiceIds = ({
 
 export const filterShownElements = (
   formRecord: FormRecord | PublicFormRecord,
-  values: FormValues
+  values: FormValues,
+  currentGroup?: string
 ) => {
   if (!formRecord || !formRecord.form || !formRecord.form.elements) {
     return [];
@@ -311,7 +315,15 @@ export const filterShownElements = (
     return elements;
   }
 
+  const groups = formRecord.form.groups;
+
   return elements.filter((element) => {
+    if (currentGroup && groups && formHasGroups(formRecord.form)) {
+      return (
+        inGroup(currentGroup, element.id, groups) &&
+        checkVisibilityRecursive(formRecord, element, values)
+      );
+    }
     return checkVisibilityRecursive(formRecord, element, values);
   });
 };
@@ -377,7 +389,14 @@ export const getNextAction = (
   matchedIds: string[]
   // values: FormValues
 ) => {
+  if (currentGroup === LOCKED_GROUPS.END) return "";
+  if (currentGroup === LOCKED_GROUPS.REVIEW) return LOCKED_GROUPS.END;
+
   let nextAction = groups[currentGroup].nextAction || "";
+
+  if (currentGroup !== LOCKED_GROUPS.REVIEW && nextAction === LOCKED_GROUPS.END) {
+    nextAction = LOCKED_GROUPS.REVIEW;
+  }
 
   // Check to see if next action is an array
   /*
@@ -469,6 +488,12 @@ export const decrementNextAction = (nextAction: NextActionRule, choiceId: string
   // Get nextAction choiceId parts
   const nextChoiceParts = nextAction.choiceId.split(".");
   const nextChoiceParentId = Number(nextChoiceParts[0]);
+
+  if (nextChoiceParts[1] === "catch-all") {
+    // If the next action is a catch-all, leave it unchanged
+    return updatedNextActions;
+  }
+
   const nextChoiceIndex = Number(nextChoiceParts[1]);
 
   // Parents don't match so we don't need to adjust the choiceId

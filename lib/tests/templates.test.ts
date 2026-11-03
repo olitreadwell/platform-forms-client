@@ -11,6 +11,7 @@ import { updateTemplate } from "@lib/templates/mutations/updateTemplate";
 import { syncAssignedUsersForTemplate } from "@lib/templates/mutations/syncAssignedUsersForTemplate";
 import { removeDeliveryOption } from "@lib/templates/mutations/removeDeliveryOption";
 import { deleteTemplate } from "@lib/templates/mutations/deleteTemplate";
+import { deleteDraftVersionForTemplate } from "@lib/templates/mutations/deleteDraftVersionForTemplate";
 import { mapTemplateToPublicFormRecord } from "@lib/templates/internal";
 import {
   TemplateAlreadyPublishedError,
@@ -28,7 +29,6 @@ import { AuditLogAccessDeniedDetails, AuditLogEvent, logEvent } from "@lib/audit
 import { unprocessedSubmissions } from "@lib/vault";
 import { deleteKey } from "@lib/serviceAccount";
 import { AccessControlError } from "@lib/auth/errors";
-import * as versioningInternal from "@lib/templates/versioning/internal";
 import {
   mockAuthorizationPass,
   mockAuthorizationFail,
@@ -114,10 +114,12 @@ describe("Template CRUD functions", () => {
       mockUnprocessedSubmissions.mockReset();
       // Default to no unprocessed submissions unless a test overrides
       mockUnprocessedSubmissions.mockResolvedValue(false);
-      vi.spyOn(versioningInternal, "isTemplateVersioningEnabled").mockResolvedValue(false);
     });
 
     it("Create a Template", async () => {
+      (prismaMock.$transaction as MockedFunction<any>).mockImplementation(
+        (callback: (transaction: typeof prismaMock) => Promise<unknown>) => callback(prismaMock)
+      );
       (prismaMock.template.create as MockedFunction<any>).mockResolvedValue(
         buildPrismaResponse(
           "formtestID",
@@ -141,6 +143,9 @@ describe("Template CRUD functions", () => {
           { name: "Test User" }
         )
       );
+      (prismaMock.templateVersion.create as MockedFunction<any>).mockResolvedValue({
+        id: "draft-version-1",
+      });
 
       const newTemplate = await createTemplate({
         userID: "1",
@@ -154,10 +159,19 @@ describe("Template CRUD functions", () => {
             users: {
               connect: { id: "1" },
             },
-            lastEditedByUserId: "1",
           }),
         })
       );
+      expect(prismaMock.templateVersion.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          templateId: "formtestID",
+          versionNumber: 1,
+          status: "DRAFT",
+          jsonConfig: formConfiguration,
+          createdByUserId: userID,
+        }),
+        select: { id: true },
+      });
 
       expect(newTemplate).toEqual(
         expect.objectContaining({
@@ -165,7 +179,6 @@ describe("Template CRUD functions", () => {
           form: formConfiguration,
           isPublished: false,
           securityAttribute: "Unclassified",
-          lastEditedBy: "Test User",
         })
       );
 
@@ -268,9 +281,7 @@ describe("Template CRUD functions", () => {
       expect(mockedLogEvent).toHaveBeenCalledTimes(0);
     });
 
-    it("Get a public template with version number from the published version", async () => {
-      vi.spyOn(versioningInternal, "isTemplateVersioningEnabled").mockResolvedValue(true);
-
+    it("Gets a public template with a version number from the published version", async () => {
       (prismaMock.template.findUnique as MockedFunction<any>).mockResolvedValue({
         ...buildPrismaResponse("formtestID", formConfiguration, true),
         currentPublishedVersion: {
@@ -293,31 +304,6 @@ describe("Template CRUD functions", () => {
           versionNumber: 2,
         })
       );
-    });
-
-    it("Does not include a public template version number when versioning is disabled", async () => {
-      (prismaMock.template.findUnique as MockedFunction<any>).mockResolvedValue({
-        ...buildPrismaResponse("formtestID", formConfiguration, true),
-        currentPublishedVersion: {
-          id: "published-version-2",
-          versionNumber: 2,
-          status: "PUBLISHED",
-          jsonConfig: formConfiguration,
-        },
-        currentDraftVersion: null,
-      });
-
-      const template = await getPublicTemplateByID("formTestID");
-
-      expect(template).toEqual(
-        expect.objectContaining({
-          id: "formtestID",
-          form: formConfiguration,
-          isPublished: true,
-          securityAttribute: "Unclassified",
-        })
-      );
-      expect(template?.versionNumber).toBeUndefined();
     });
 
     it("Get a full template", async () => {
@@ -351,9 +337,7 @@ describe("Template CRUD functions", () => {
       );
     });
 
-    it("Get a full template for a specific version when versioning is enabled", async () => {
-      vi.spyOn(versioningInternal, "isTemplateVersioningEnabled").mockResolvedValue(true);
-
+    it("Gets a full template for a specific version", async () => {
       const currentFormConfiguration = structuredClone(formConfiguration as FormProperties);
       currentFormConfiguration.elements = [
         ...currentFormConfiguration.elements,
@@ -410,20 +394,26 @@ describe("Template CRUD functions", () => {
       );
     });
 
-    it("Ignores requested template version when versioning is disabled", async () => {
+    it("Returns null when the requested template version is unavailable", async () => {
       (prismaMock.template.findUnique as MockedFunction<any>).mockResolvedValue(
         buildPrismaResponse("formtestID", formConfiguration)
       );
 
       const template = await getFullTemplateByID("formTestID", false, 2);
 
-      expect(prismaMock.templateVersion.findFirst).not.toHaveBeenCalled();
-      expect(template).toEqual(
-        expect.objectContaining({
-          id: "formtestID",
-          form: formConfiguration,
-        })
-      );
+      expect(prismaMock.templateVersion.findFirst).toHaveBeenCalledWith({
+        where: {
+          templateId: "formTestID",
+          versionNumber: 2,
+        },
+        select: {
+          id: true,
+          versionNumber: true,
+          status: true,
+          jsonConfig: true,
+        },
+      });
+      expect(template).toBeNull();
     });
 
     it("Null returned when Template does not Exist", async () => {
@@ -505,7 +495,6 @@ describe("Template CRUD functions", () => {
           form: updatedFormConfig,
           isPublished: true,
           securityAttribute: "Unclassified",
-          lastEditedBy: "Test User",
         })
       );
       expect(mockedLogEvent).toHaveBeenCalledWith(
@@ -556,11 +545,6 @@ describe("Template CRUD functions", () => {
             publishReason: "",
             publishFormType: "",
             publishDesc: "",
-            lastEditedBy: {
-              connect: {
-                id: userID,
-              },
-            },
           }),
         })
       );
@@ -571,7 +555,6 @@ describe("Template CRUD functions", () => {
           form: formConfiguration,
           isPublished: true,
           securityAttribute: "Unclassified",
-          lastEditedBy: "Test User",
         })
       );
       expect(mockedLogEvent).toHaveBeenCalledWith(
@@ -813,6 +796,41 @@ describe("Template CRUD functions", () => {
       expect(mockedDeleteKey).toHaveBeenCalledTimes(1);
     });
 
+    it("Deletes a published draft version without archiving its parent template", async () => {
+      (prismaMock.$transaction as MockedFunction<any>).mockImplementation(
+        (callback: (transaction: typeof prismaMock) => Promise<unknown>) => callback(prismaMock)
+      );
+      (prismaMock.template.findUnique as MockedFunction<any>).mockResolvedValue({
+        isPublished: true,
+        currentDraftVersionId: "draft-version-2",
+      });
+      (prismaMock.template.update as MockedFunction<any>).mockResolvedValue({});
+      (prismaMock.templateVersion.delete as MockedFunction<any>).mockResolvedValue({});
+
+      await expect(deleteDraftVersionForTemplate("formtestID")).resolves.toBe(true);
+
+      expect(prismaMock.template.update).toHaveBeenCalledWith({
+        where: { id: "formtestID" },
+        data: {
+          currentDraftVersionId: null,
+          lastEditedByUserId: userID,
+        },
+      });
+      expect(prismaMock.template.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ ttl: expect.any(Date) }),
+        })
+      );
+      expect(prismaMock.templateVersion.delete).toHaveBeenCalledWith({
+        where: { id: "draft-version-2" },
+      });
+      expect(mockedLogEvent).toHaveBeenCalledWith(
+        userID,
+        { id: "formtestID", type: "Form" },
+        AuditLogEvent.DeleteDraftVersion
+      );
+    });
+
     // Test for published template with unprocessed submissions
     it("Published template with unprocessed submissions cannot be deleted", async () => {
       (prismaMock.template.findUnique as MockedFunction<any>).mockResolvedValue({
@@ -907,57 +925,6 @@ describe("Template CRUD functions", () => {
           },
         })
       );
-    });
-
-    it("parseTemplate should handle lastEditedBy correctly", async () => {
-      const { parseTemplate } = await import("@lib/templates/internal");
-
-      // Test with valid lastEditedBy
-      const templateWithEditor = {
-        id: "test1",
-        name: "Test Form",
-        jsonConfig: formConfiguration,
-        isPublished: false,
-        deliveryOption: null,
-        securityAttribute: "Unclassified",
-        formPurpose: "",
-        publishReason: "",
-        publishFormType: "",
-        publishDesc: "",
-        saveAndResume: true,
-        notificationsInterval: null,
-        lastEditedBy: { name: "John Doe" },
-      };
-
-      const result1 = parseTemplate(templateWithEditor);
-      expect(result1.lastEditedBy).toBe("John Doe");
-
-      // Test with null name
-      const templateWithNullName = {
-        ...templateWithEditor,
-        lastEditedBy: { name: null },
-      };
-
-      const result2 = parseTemplate(templateWithNullName);
-      expect(result2.lastEditedBy).toBeUndefined();
-
-      // Test with null lastEditedBy
-      const templateWithNoEditor = {
-        ...templateWithEditor,
-        lastEditedBy: null,
-      };
-
-      const result3 = parseTemplate(templateWithNoEditor);
-      expect(result3.lastEditedBy).toBeUndefined();
-
-      // Test with undefined lastEditedBy
-      const templateWithUndefinedEditor = {
-        ...templateWithEditor,
-        lastEditedBy: undefined,
-      };
-
-      const result4 = parseTemplate(templateWithUndefinedEditor);
-      expect(result4.lastEditedBy).toBeUndefined();
     });
 
     it("Only include public properties", async () => {

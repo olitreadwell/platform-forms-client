@@ -3,13 +3,17 @@ import { Metadata } from "next";
 import { authCheckAndThrow } from "@lib/actions";
 import { notFound } from "next/navigation";
 import { Preview } from "./Preview";
-import { allowGrouping } from "@root/lib/groups/utils/allowGrouping";
 import { getTemplateClosureState } from "@lib/templates/queries/getTemplateClosureState";
 import { ClosedDetails } from "@lib/types";
 import { PreviewClosed } from "./PreviewClosed";
 import { Language } from "@lib/types/form-builder-types";
-import { getTemplateVersionState } from "@lib/templates/versioning/queries/getTemplateVersionState";
+import { getTemplateVersionState } from "@lib/templates/queries/getTemplateVersionState";
 import { PublishedPreview } from "./PublishedPreview";
+
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
 
 export async function generateMetadata(props: {
   params: Promise<{ locale: string }>;
@@ -38,8 +42,6 @@ export default async function Page(props: { params: Promise<{ id: string; locale
       }));
   const disableSubmit = id === "0000" || !session?.user;
 
-  const isAllowGrouping = allowGrouping();
-
   const formID = id;
 
   if (!session?.user && formID !== "0000") {
@@ -59,5 +61,5 @@ export default async function Page(props: { params: Promise<{ id: string; locale
     return <PreviewClosed closedDetails={closedDetails.closedDetails as ClosedDetails} />;
   }
 
-  return <Preview disableSubmit={disableSubmit} allowGrouping={isAllowGrouping} />;
+  return <Preview disableSubmit={disableSubmit} />;
 }

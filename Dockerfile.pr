@@ -1,3 +1,7 @@
+# Use the ARG to pull the image and assign a static alias (e.g., "lambda-adapter-source")
+ARG ECR_ACCOUNT_ID
+FROM ${ECR_ACCOUNT_ID}.dkr.ecr.ca-central-1.amazonaws.com/ecr-public/awsguru/aws-lambda-adapter:1.1.0 AS lambda-adapter-source
+
 # Form viewier that runs as a Lambda function.  It is used to create 
 # Lambda function review environments for each PR.
 FROM node:24-alpine AS build
@@ -28,6 +32,10 @@ ENV NEXT_PUBLIC_HCAPTCHA_SITE_KEY=$HCAPTCHA_SITE_KEY
 
 ARG INDEX_SITE="false"
 ENV INDEX_SITE=$INDEX_SITE
+
+# Disable Prisma usage data collection (see https://www.prisma.io/docs/orm/v6/tools/prisma-cli#telemetry)
+ENV CHECKPOINT_DISABLE=1
+
 RUN corepack enable && yarn set version stable
 RUN yarn workspaces focus gcforms
 RUN yarn build
@@ -47,8 +55,6 @@ ENV INDEX_SITE=$INDEX_SITE
 ARG TAG_VERSION
 ENV TAG_VERSION=$TAG_VERSION
 
-ARG NEXT_DEPLOYMENT_ID
-ENV NEXT_DEPLOYMENT_ID=$NEXT_DEPLOYMENT_ID
 
 ENV AWS_LWA_ENABLE_COMPRESSION=true
 ENV HOSTNAME=localhost
@@ -66,7 +72,7 @@ WORKDIR /src
 COPY --from=build /src/.next/standalone ./
 COPY --from=build /src/.next/static ./.next/static
 
-COPY package.json yarn.lock .yarnrc.yml next.config.ts nextCacheHandler.ts ./
+COPY package.json yarn.lock .yarnrc.yml next.config.ts ./
 COPY .yarn ./.yarn
 COPY public ./public
 COPY scripts/pr-review-entrypoint.sh ./entrypoint.sh
@@ -76,9 +82,8 @@ RUN corepack enable && yarn set version stable
 RUN apk update && apk add --no-cache aws-cli
 
 # Lambda web adapter: https://github.com/awslabs/aws-lambda-web-adapter
-# The public.ecr.aws/awsguru/aws-lambda-adapter:0.7.0 image reference in the docs has
-# been pushed to the public CDS ECR to avoid rate limiting when pulling the image.
-COPY --from=public.ecr.aws/cds-snc/aws-lambda-adapter:0.9.0@sha256:19cd0b92bc4a376b2b63e3b02d8b9ad3b4031ea3549fd5e54faa848c49948e09 /lambda-adapter /opt/extensions/lambda-adapter
+# The public.ecr.aws/awsguru/aws-lambda-adapter has been cached in order to avoid rate limiting
+COPY --from=lambda-adapter-source /lambda-adapter /opt/extensions/lambda-adapter
 RUN ln -s /tmp ./.next/cache
 
 EXPOSE 3000

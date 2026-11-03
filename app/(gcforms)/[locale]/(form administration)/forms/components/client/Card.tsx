@@ -6,7 +6,7 @@ import Skeleton from "react-loading-skeleton";
 import { useTranslation } from "@i18n/client";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { cn, dateHasPast } from "@root/lib/utils";
+import { cn, dateHasPast } from "@lib/utils";
 
 import {
   CARD_STATE,
@@ -125,7 +125,7 @@ const CardBanner = memo(
     const publishedLabel = isClosed
       ? t("card.states.closed")
       : isPublished
-        ? t("card.states.published") + t(publishedVersionText ? `${publishedVersionText}` : "")
+        ? t(publishedVersionText ? `${publishedVersionText}` : "") + t("card.states.published")
         : t("card.states.draft");
 
     return (
@@ -270,7 +270,12 @@ const CardTitle = memo(
       );
     } else if (isPublished && !linkToEdit) {
       titleElement = (
-        <Link className={classesLink} href={`/${language}/id/${id}`} prefetch={false}>
+        <Link
+          className={classesLink}
+          href={`/${language}/id/${id}`}
+          prefetch={false}
+          target="_blank"
+        >
           {content}
         </Link>
       );
@@ -525,6 +530,7 @@ const CardComponent = ({
           id={card.id}
           name={card.name}
           hasDraft={card.hasDraft}
+          currentDraftVersion={card.currentDraftVersion}
           isPublished={card.isPublished}
           ttl={card.ttl ? card.ttl : undefined}
           status={status}

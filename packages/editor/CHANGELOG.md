@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-10-07
+
+- Fix a minor ARIA issue
+
+## [2.0.0] - 2026-09-03
+
+- Fix collapsible nested content transformer
+
+## [1.0.22] - 2026-08-21
+
+- Fix collapsible icon warnings
+
+## [1.0.21] - 2026-08-19
+
+- Enable collapsible / details extension
+
+## [1.0.20] - 2026-08-19
+
+- Update collapsible / details extension styles
+
 ## [1.0.19] - 2026-08-17
 
 - Add collapsible extension

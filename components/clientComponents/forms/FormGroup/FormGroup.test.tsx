@@ -38,11 +38,17 @@ describe.each([["en"], ["fr"]] as Array<[Language]>)("Generate a form group", (l
   test("renders properly", () => {
     render(
       <Formik onSubmit={() => {}} initialValues={{}}>
-        <GenerateElement element={radioButtonData} language={lang} />
+        <GenerateElement element={radioButtonData} language={lang} isTestMode={true} />
       </Formik>
     );
-    const title = (lang === "en" ? radioButtonData.properties.titleEn : radioButtonData.properties.titleFr) as string;
-    const description = (lang === "en" ? radioButtonData.properties.descriptionEn : radioButtonData.properties.descriptionFr) as string;
+    const title = (
+      lang === "en" ? radioButtonData.properties.titleEn : radioButtonData.properties.titleFr
+    ) as string;
+    const description = (
+      lang === "en"
+        ? radioButtonData.properties.descriptionEn
+        : radioButtonData.properties.descriptionFr
+    ) as string;
 
     // Title are rendered
     screen.getAllByText(title).forEach((input) => {
@@ -52,7 +58,11 @@ describe.each([["en"], ["fr"]] as Array<[Language]>)("Generate a form group", (l
     screen.getAllByText(description).forEach((description) => {
       expect(description).toHaveClass("gc-description");
     });
-    expect(screen.getByRole("group")).toHaveAccessibleDescription(description);
+    const radios = screen.getAllByRole("radio");
+    expect(radios[0]).toHaveAccessibleDescription(description);
+    radios.slice(1).forEach((radio) => {
+      expect(radio).not.toHaveAccessibleDescription(description);
+    });
     // Children are rendered.
     screen.getAllByText(title).forEach((child) => {
       expect(screen.getByRole("group")).toContainElement(child);

@@ -1,10 +1,6 @@
 {
-  "addressComplete": false,
-  "formTimer": false,
-  "hCaptcha": false,
-  "notification": false,
-  "templateVersioning": false,
   "topBanner": false,
+  "fileUpload": false,
   "responsesPilot": false,
   "zitadelLogin": false
 }

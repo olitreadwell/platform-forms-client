@@ -51,11 +51,29 @@ const comboboxData = {
   },
 } as const as FormElement;
 
+const renderCombobox = (options: { required?: boolean; error?: string } = {}) => {
+  vi.mocked(useField).mockReturnValueOnce([
+    { value: "", name: "province", onBlur: vi.fn() },
+    { touched: Boolean(options.error), error: options.error },
+    { setValue: vi.fn(), setError: vi.fn(), setTouched: vi.fn() },
+  ] as unknown as ReturnType<typeof useField>);
+
+  render(
+    <Combobox
+      id="province"
+      name="province"
+      choices={["Alberta", "Ontario"]}
+      required={options.required}
+      ariaDescribedBy="description-province"
+    />
+  );
+};
+
 describe.each([["en"], ["fr"]] as Array<[Language]>)("Combobox component", (lang: Language) => {
   afterEach(() => cleanup());
 
   it("renders without errors", async () => {
-    render(<GenerateElement element={comboboxData} language={lang} />);
+    render(<GenerateElement element={comboboxData} language={lang} isTestMode={true} />);
 
     const title = lang === "en" ? comboboxData.properties.titleEn : comboboxData.properties.titleFr;
     const shortDescription =
@@ -104,17 +122,15 @@ describe("Combobox language switch", () => {
     const setErrorMock = vi.fn();
 
     // Intercept useField that Comboox uses and provide with a default French choice
-    vi.mocked(useField).mockReturnValueOnce(
-      [
-        {
-          value: "Colombie-Britannique",
-          name: "province",
-          onBlur: undefined,
-        },
-        { touched: null, error: null },
-        { setValue: setValueMock, setError: setErrorMock, setTouched: vi.fn() },
-      ] as unknown as ReturnType<typeof useField>
-    );
+    vi.mocked(useField).mockReturnValueOnce([
+      {
+        value: "Colombie-Britannique",
+        name: "province",
+        onBlur: undefined,
+      },
+      { touched: null, error: null },
+      { setValue: setValueMock, setError: setErrorMock, setTouched: vi.fn() },
+    ] as unknown as ReturnType<typeof useField>);
 
     const englishChoices = ["British Columbia", "Alberta", "Ontario"];
     const bilingualChoices = [
@@ -145,17 +161,15 @@ describe("Combobox language switch", () => {
     const setValueMock = vi.fn();
     const setErrorMock = vi.fn();
 
-    vi.mocked(useField).mockReturnValueOnce(
-      [
-        {
-          value: "British Columbia",
-          name: "province",
-          onBlur: undefined,
-        },
-        { touched: null, error: null },
-        { setValue: setValueMock, setError: setErrorMock, setTouched: vi.fn() },
-      ] as unknown as ReturnType<typeof useField>
-    );
+    vi.mocked(useField).mockReturnValueOnce([
+      {
+        value: "British Columbia",
+        name: "province",
+        onBlur: undefined,
+      },
+      { touched: null, error: null },
+      { setValue: setValueMock, setError: setErrorMock, setTouched: vi.fn() },
+    ] as unknown as ReturnType<typeof useField>);
 
     const frenchChoices = ["Colombie-Britannique", "Alberta", "Ontario"];
     const bilingualChoices = [
@@ -183,17 +197,15 @@ describe("Combobox language switch", () => {
     const setValueMock = vi.fn();
     const setErrorMock = vi.fn();
 
-    vi.mocked(useField).mockReturnValueOnce(
-      [
-        {
-          value: "British Columbia",
-          name: "province",
-          onBlur: undefined,
-        },
-        { touched: null, error: null },
-        { setValue: setValueMock, setError: setErrorMock, setTouched: vi.fn() },
-      ] as unknown as ReturnType<typeof useField>
-    );
+    vi.mocked(useField).mockReturnValueOnce([
+      {
+        value: "British Columbia",
+        name: "province",
+        onBlur: undefined,
+      },
+      { touched: null, error: null },
+      { setValue: setValueMock, setError: setErrorMock, setTouched: vi.fn() },
+    ] as unknown as ReturnType<typeof useField>);
 
     const englishChoices = ["British Columbia", "Alberta", "Ontario"];
     const bilingualChoices = [
@@ -219,31 +231,60 @@ describe("Combobox language switch", () => {
     const setValueMock = vi.fn();
     const setErrorMock = vi.fn();
 
-    vi.mocked(useField).mockReturnValueOnce(
-      [
-        {
-          value: "Some Value",
-          name: "field",
-          onBlur: undefined,
-        },
-        { touched: null, error: null },
-        { setValue: setValueMock, setError: setErrorMock, setTouched: vi.fn() },
-      ] as unknown as ReturnType<typeof useField>
-    );
+    vi.mocked(useField).mockReturnValueOnce([
+      {
+        value: "Some Value",
+        name: "field",
+        onBlur: undefined,
+      },
+      { touched: null, error: null },
+      { setValue: setValueMock, setError: setErrorMock, setTouched: vi.fn() },
+    ] as unknown as ReturnType<typeof useField>);
 
     const choices = ["Some Value", "Other Value"];
 
-    render(
-      <Combobox
-        id="test-combobox"
-        name="field"
-        lang="en"
-        choices={choices}
-      />
-    );
+    render(<Combobox id="test-combobox" name="field" lang="en" choices={choices} />);
 
     // setValue should NOT be called without allChoices
     expect(setValueMock).not.toHaveBeenCalled();
   });
 });
 
+describe("Combobox validation accessibility", () => {
+  afterEach(() => cleanup());
+
+  it("uses group-owned application validation without native required", () => {
+    renderCombobox({ required: true });
+
+    const input = screen.getByTestId("combobox-input");
+    expect(input).not.toHaveAttribute("required");
+    expect(input).toHaveAttribute("aria-required", "true");
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(input).toHaveAttribute("aria-describedby", "description-province province-hint");
+  });
+
+  it("omits required state when optional", () => {
+    renderCombobox();
+
+    const input = screen.getByTestId("combobox-input");
+    expect(input).not.toHaveAttribute("required");
+    expect(input).not.toHaveAttribute("aria-required");
+    expect(input).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("associates the rendered validation error with the input", () => {
+    renderCombobox({ required: true, error: "Choose a province" });
+
+    const input = screen.getByTestId("combobox-input");
+    expect(input).toHaveAttribute("aria-required", "true");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute(
+      "aria-describedby",
+      "errorMessage-province description-province province-hint"
+    );
+
+    const error = screen.getByTestId("errorMessage");
+    expect(error).toHaveAttribute("id", "errorMessage-province");
+    expect(error).toHaveTextContent("Choose a province");
+  });
+});

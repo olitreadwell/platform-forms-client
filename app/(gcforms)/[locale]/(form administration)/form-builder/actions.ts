@@ -106,6 +106,7 @@ export const createOrUpdateTemplate = AuthenticatedAction(
     const validationResult = validateTemplate(formConfig);
 
     if (!validationResult.valid) {
+      logMessage.info(`Template validation failed: ${JSON.stringify(validationResult.errors)}`);
       return { formRecord: null, error: "validationError" };
     }
 
@@ -231,6 +232,7 @@ export const updateTemplate = AuthenticatedAction(
 
           revalidatePath(`/form-builder/${command.formId}`, "layout");
           revalidatePath(`/form-builder/${command.formId}/published`, "page");
+          revalidatePath("(gcforms)/[locale]/(form administration)/forms", "page");
           break;
         case UpdateTemplateAction.FormPurpose:
           response = await updateDbTemplate({

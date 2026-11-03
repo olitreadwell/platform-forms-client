@@ -3,13 +3,13 @@ import { LeftNavigation } from "./components/LeftNavigation";
 import { ToastContainer } from "@formBuilder/components/shared/Toast";
 import { Footer } from "@serverComponents/globals/Footer";
 import { Header } from "@clientComponents/globals/Header/Header";
+import { SkipLink } from "@serverComponents/globals/SkipLink";
 import { AccessControlError } from "@lib/auth/errors";
 import { getTemplateWithAssignedUsers } from "@lib/templates/queries/getTemplateWithAssignedUsers";
 import { redirect } from "next/navigation";
 import { SaveTemplateProvider } from "@lib/hooks/form-builder/useTemplateContext";
 import { RefStoreProvider } from "@lib/hooks/form-builder/useRefStore";
 import { RightPanel } from "@formBuilder/components/shared/right-panel/RightPanel";
-import { allowGrouping } from "@root/lib/groups/utils/allowGrouping";
 import { GroupStoreProvider } from "@lib/groups/useGroupStore";
 import { TemplateStoreProvider } from "@lib/store/useTemplateStore";
 import { Language } from "@lib/types/form-builder-types";
@@ -30,6 +30,11 @@ import { EditLockProvider } from "@formBuilder/components/shared/edit-lock/EditL
 import { AccountMenu } from "@formBuilder/components/shared/account-menu/AccountMenu";
 import { ManageFormAccessDialogContainer } from "./components/dialogs/ManageFormAccessDialog";
 import { CreateDraftConfirmDialog } from "./components/dialogs/CreateDraftConfirmDialog/CreateDraftConfirmDialog";
+
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
 
 export default async function Layout(props: {
   children: React.ReactNode;
@@ -55,7 +60,6 @@ export default async function Layout(props: {
 
   const formID = id || null;
 
-  const allowGroupsFlag = allowGrouping();
   const shareUsesManageAccess = formID !== "0000";
   const publishFormsEnabled = session
     ? await authorization.hasPublishFormsPrivilege().catch(() => false)
@@ -106,7 +110,7 @@ export default async function Layout(props: {
 
   return (
     <FormBuilderConfigProvider formBuilderConfig={formBuilderConfig}>
-      <TemplateStoreProvider {...{ ...initialForm, locale, allowGroupsFlag }}>
+      <TemplateStoreProvider {...{ ...initialForm, locale }}>
         <SaveTemplateProvider>
           <RefStoreProvider>
             <EditLockProvider
@@ -119,10 +123,12 @@ export default async function Layout(props: {
 
                 <div className="h-full">
                   <div className="flex min-h-screen flex-col">
+                    <SkipLink />
                     <Header
                       context="formBuilder"
                       className="mb-0"
                       shareUsesManageAccess={shareUsesManageAccess}
+                      skipLink={false}
                     />
                     <div className="bg-gray-soft flex shrink-0 grow basis-auto flex-col">
                       <ToastContainer containerId="default" />
@@ -163,7 +169,7 @@ export default async function Layout(props: {
                             >
                               {children}
                             </main>
-                            {allowGroupsFlag && <RightPanel id={id} lang={locale as Language} />}
+                            <RightPanel id={id} lang={locale as Language} />
                           </EditLockClient>
                         </div>
                       </div>

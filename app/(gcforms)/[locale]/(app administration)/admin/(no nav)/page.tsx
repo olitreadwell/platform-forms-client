@@ -3,6 +3,11 @@ import Link from "next/link";
 import { ManageAccountsIcon, SettingsApplicationsIcon } from "@serverComponents/icons";
 import { Metadata } from "next";
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 export async function generateMetadata(props: {
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
@@ -22,7 +27,7 @@ export default async function Page(props: { params: Promise<{ locale: string }> 
 
   const { locale } = params;
 
-  const { t } = await serverTranslation(["admin-home", "common"]);
+  const { t } = await serverTranslation(["admin-home", "common"], { lang: locale });
 
   return (
     <>
@@ -73,6 +78,9 @@ export default async function Page(props: { params: Promise<{ locale: string }> 
             </li>
             <li>
               <Link href={`/${locale}/admin/lexical`}>{t("lexical")}</Link>
+            </li>
+            <li>
+              <Link href={`/${locale}/admin/branding`}>{t("brandingPreview")}</Link>
             </li>
           </ul>
         </div>

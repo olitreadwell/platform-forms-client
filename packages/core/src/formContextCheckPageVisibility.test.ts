@@ -302,6 +302,28 @@ describe("getValuesWithMatchedIds", () => {
     expect(result).toEqual({ "3": "3.1" });
   });
 
+  it.each([
+    [
+      ["Choice 1", "Choice 2"],
+      ["3.0", "3.1"],
+    ],
+    [
+      ["Choice 2 FR", "Choice 1 FR"],
+      ["3.1", "3.0"],
+    ],
+    [["Choice 2"], ["3.1"]],
+    [[], []],
+    [
+      ["Unknown choice", "Choice 2"],
+      ["Unknown choice", "3.1"],
+    ],
+  ])("preserves every checkbox selection in %j", (selected, expected) => {
+    const values: FormValues = { "3": selected };
+
+    expect(getValuesWithMatchedIds(formElements, values)).toEqual({ "3": expected });
+    expect(values).toEqual({ "3": selected });
+  });
+
   it("handles multiple elements with mixed types", () => {
     const values: FormValues = {
       "1": "Text value",
@@ -322,18 +344,16 @@ describe("getValuesWithMatchedIds", () => {
     expect(result).toEqual({ "2": "Non-existent option" });
   });
 
-  it("ignores reserved keys (currentGroup, groupHistory, matchedIds)", () => {
+  it("ignores reserved keys (currentGroup, matchedIds)", () => {
     const values: FormValues = {
       "2": "Option A",
       currentGroup: "start",
-      groupHistory: ["start"],
       matchedIds: ["2.0"],
     };
     const result = getValuesWithMatchedIds(formElements, values);
     expect(result).toEqual({
       "2": "2.0",
       currentGroup: "start",
-      groupHistory: ["start"],
       matchedIds: ["2.0"],
     });
   });

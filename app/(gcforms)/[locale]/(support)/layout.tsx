@@ -5,6 +5,11 @@ import { GcdsHeader } from "@serverComponents/globals/GcdsHeader/GcdsHeader";
 import { type Language } from "@lib/types/form-builder-types";
 import { headers } from "next/headers";
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 export default async function Layout(props: {
   children: React.ReactNode;
   params: Promise<{ locale: string; id: string }>;
@@ -18,14 +23,16 @@ export default async function Layout(props: {
   return (
     <div className="flex h-full flex-col">
       <SkipLink />
-      <GcdsHeader pathname={pathname} language={locale as Language} />
+      <GcdsHeader pathname={pathname} language={locale as Language} skipLink={false} />
       <div
         className={cn(
           "gc-formview",
-          "container-xl mx-auto px-[var(--gcds-spacing-225)] tablet:px-[var(--gcds-spacing-600)] laptop:px-0"
+          "container-xl tablet:px-[var(--gcds-spacing-600)] laptop:px-0 mx-auto px-[var(--gcds-spacing-225)]"
         )}
       >
-        <main id="content">{children}</main>
+        <main id="content" tabIndex={-1}>
+          {children}
+        </main>
       </div>
       <Footer />
     </div>

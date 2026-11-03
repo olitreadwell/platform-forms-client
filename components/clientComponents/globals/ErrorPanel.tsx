@@ -8,9 +8,7 @@ import { LinkButton } from "@serverComponents/globals/Buttons/LinkButton";
 import { BackArrowIcon } from "@serverComponents/icons";
 import { useFocusIt } from "@lib/hooks/useFocusIt";
 import { ga } from "@lib/client/clientHelpers";
-
-// Start the async call before the component renders
-const getSessionPromise = getSession();
+import { logMessage } from "@lib/logger";
 
 export const ErrorPanel = ({
   title,
@@ -27,14 +25,24 @@ export const ErrorPanel = ({
 
   const [session, setSession] = useState<Session | null>(null);
   useEffect(() => {
-    getSessionPromise.then((session) => {
-      setSession(session);
-    });
-  });
+    let mounted = true;
+
+    getSession()
+      .then((session) => {
+        if (mounted) setSession(session);
+      })
+      .catch((error: unknown) => {
+        logMessage.error(error);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     ga("client_error_page");
-  });
+  }, []);
 
   const headingRef = useRef(null);
 
@@ -58,13 +66,13 @@ export const ErrorPanel = ({
 
   return (
     <div className="mx-4 flex h-full items-center justify-center">
-      <div className="rounded-2xl border-2 border-solid border-blue bg-gray-soft px-12 py-10 laptop:max-w-2xl">
+      <div className="border-blue bg-gray-soft laptop:max-w-2xl rounded-2xl border-2 border-solid px-12 py-10">
         <HeadingTag className="!mb-4 border-none" ref={headingRef}>
           {title || defaultTitle}
         </HeadingTag>
         <div className="mb-10">{children || defaultMessage}</div>
         <div className="laptop:flex">
-          <LinkButton.Primary href={homeHref} className="mb-2 mr-3">
+          <LinkButton.Primary href={homeHref} className="mr-3 mb-2">
             <span>
               <BackArrowIcon className="mr-2 inline-block self-stretch fill-white" />
               {homeText}

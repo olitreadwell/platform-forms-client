@@ -61,8 +61,9 @@ export const FormElementTypes = {
 } as const;
 export type FormElementTypes = (typeof FormElementTypes)[keyof typeof FormElementTypes];
 
+// format: [FormElementTypes.addressComplete]: { flag: "addressComplete" },
 export const BetaFormElementTypes = {
-  [FormElementTypes.addressComplete]: { flag: "addressComplete" },
+  ["placeholder"]: { flag: "" },
 };
 
 export type ConditionalRule = {
@@ -80,16 +81,13 @@ export interface ValidationProperties {
   maxValue?: number;
   minDigits?: number;
   maxDigits?: number;
-  descriptionEN?: string;
-  descriptionFR?: string;
-  [key: string]: unknown;
+  all?: boolean;
 }
 
 // the choices available for fields with multiple options like dropdowns or radio buttons
 export interface PropertyChoices {
   en: string;
   fr: string;
-  [key: string]: string;
 }
 
 export type AddressComponents = {
@@ -102,7 +100,6 @@ export interface DeliveryOption {
   emailAddress: string;
   emailSubjectEn?: string;
   emailSubjectFr?: string;
-  [key: string]: string | undefined;
 }
 
 export const SortOption = {
@@ -128,8 +125,6 @@ export interface ElementProperties {
   managedChoices?: string | string[];
   subElements?: FormElement[];
   fileType?: string | string[] | undefined;
-  headingLevel?: string | undefined;
-  isSectional?: boolean;
   maxNumberOfRows?: number;
   autoComplete?: string;
   dateFormat?: string;
@@ -139,23 +134,10 @@ export interface ElementProperties {
   useThousandsSeparator?: boolean;
   numberOfStars?: number;
   conditionalRules?: ConditionalRule[];
-  full?: boolean;
   addressComponents?: AddressComponents | undefined;
   dynamicRow?: dynamicRowType;
   sortOrder?: SortValue;
   strictValue?: boolean;
-  [key: string]:
-    | string
-    | string[]
-    | number
-    | boolean
-    | Array<PropertyChoices>
-    | Array<FormElement>
-    | ValidationProperties
-    | Array<ConditionalRule>
-    | AddressComponents
-    | dynamicRowType
-    | undefined;
 }
 
 // defines the fields in the object that controls form branding
@@ -169,7 +151,6 @@ export interface BrandProperties {
   urlFr?: string;
   // if set to true the GC branding will be removed from the footer
   disableGcBranding?: boolean;
-  [key: string]: string | boolean | undefined;
 }
 
 // used to define attributes for a form element or field
@@ -185,6 +166,8 @@ export interface FormElement {
 
 // defines the fields for the main form configuration object
 export interface FormProperties {
+  // template schema version this form was authored/migrated against; absent means version 0
+  schemaVersion?: number;
   titleEn: string;
   titleFr: string;
   introduction?: Record<string, string>;
@@ -198,15 +181,6 @@ export interface FormProperties {
   lastGeneratedElementId?: number;
   brand?: BrandProperties;
   formPurpose?: string;
-  [key: string]:
-    | string
-    | number
-    | boolean
-    | Array<string | number | FormElement>
-    | Record<string, string>
-    | BrandProperties
-    | GroupsType
-    | undefined;
 }
 
 export type dynamicRowType = {
@@ -237,21 +211,16 @@ export type FormRecord = {
   saveAndResume?: boolean;
   notificationsInterval?: NotificationsInterval;
   lastEditedBy?: string | null;
+  publishReason?: string;
+  formPurpose?: FormPurpose;
+  publishFormType?: string;
+  publishDesc?: string;
+  currentPublishedVersion?: number | null;
+  currentDraftVersion?: number | null;
   _count?: {
     users: number;
     invitations: number;
   };
-  [key: string]:
-    | string
-    | boolean
-    | number
-    | Date
-    | FormProperties
-    | DeliveryOption
-    | ClosedDetails
-    | { users: number; invitations: number }
-    | undefined
-    | null;
 };
 
 export type SecurityAttribute = "Unclassified" | "Protected A" | "Protected B";

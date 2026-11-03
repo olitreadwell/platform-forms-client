@@ -3,6 +3,7 @@ import { Language, LocalizedElementProperties } from "../../types/form-builder-t
 import { isValidatedTextType, isAutoCompleteField } from "@lib/utils/form-builder";
 import { addressCompleteDefaultElementProperties } from "@clientComponents/forms/AddressComplete/defaults";
 import { formattedDateDefaultElementProperties } from "@clientComponents/forms/FormattedDate/defaults";
+import { starRatingDefaultElementProperties } from "@clientComponents/forms/StarRating/defaults";
 
 type ElementType =
   | keyof typeof FormElementTypes
@@ -43,6 +44,90 @@ export const defaultField: FormElement = {
     placeholderEn: "",
     placeholderFr: "",
   },
+};
+
+const commonProperties = [
+  "questionId",
+  "tags",
+  "titleEn",
+  "titleFr",
+  "descriptionEn",
+  "descriptionFr",
+  "conditionalRules",
+  "validation",
+];
+
+const localizedInputProperties = [...commonProperties, "placeholderEn", "placeholderFr"];
+
+type StrictElementType = Exclude<
+  FormElementTypes,
+  | typeof FormElementTypes.address
+  | typeof FormElementTypes.name
+  | typeof FormElementTypes.firstMiddleLastName
+  | typeof FormElementTypes.departments
+  | typeof FormElementTypes.contact
+  | typeof FormElementTypes.customJson
+>;
+
+const allowedPropertiesByType: Record<StrictElementType, readonly string[]> = {
+  [FormElementTypes.textField]: [...localizedInputProperties, "autoComplete"],
+  [FormElementTypes.textArea]: [...localizedInputProperties],
+  [FormElementTypes.numberInput]: [
+    ...localizedInputProperties,
+    "allowNegativeNumbers",
+    "stepCount",
+    "currencyCode",
+    "useThousandsSeparator",
+  ],
+  [FormElementTypes.dropdown]: [...commonProperties, "choices", "sortOrder"],
+  [FormElementTypes.radio]: [...commonProperties, "choices"],
+  [FormElementTypes.checkbox]: [...commonProperties, "choices"],
+  [FormElementTypes.combobox]: [...commonProperties, "choices", "managedChoices", "strictValue"],
+  [FormElementTypes.fileInput]: [...commonProperties, "fileType"],
+  [FormElementTypes.dynamicRow]: [
+    "titleEn",
+    "titleFr",
+    "descriptionEn",
+    "descriptionFr",
+    "conditionalRules",
+    "validation",
+    "maxNumberOfRows",
+    "dynamicRow",
+    "subElements",
+  ],
+  [FormElementTypes.richText]: ["descriptionEn", "descriptionFr", "conditionalRules"],
+  [FormElementTypes.attestation]: [...commonProperties],
+  [FormElementTypes.addressComplete]: [...commonProperties, "addressComponents"],
+  [FormElementTypes.formattedDate]: [...commonProperties, "dateFormat", "autoComplete"],
+  [FormElementTypes.starRating]: [...commonProperties, "numberOfStars"],
+};
+
+export const filterElementPropertiesByType = (
+  element: FormElement,
+  isSubElement = false
+): FormElement => {
+  const allowedProperties = allowedPropertiesByType[element.type as StrictElementType];
+  if (!allowedProperties) return element;
+
+  const allowed = new Set(allowedProperties);
+  if (isSubElement) allowed.delete("conditionalRules");
+
+  const properties = Object.fromEntries(
+    Object.entries(element.properties).filter(
+      ([key, value]) => allowed.has(key) && value !== undefined
+    )
+  ) as FormElement["properties"];
+
+  if (
+    element.type === FormElementTypes.combobox &&
+    properties.managedChoices !== undefined &&
+    Array.isArray(properties.choices) &&
+    properties.choices.length === 0
+  ) {
+    delete properties.choices;
+  }
+
+  return { ...element, properties };
 };
 
 export const localizeField = <LocalizedProperty extends string>(
@@ -124,11 +209,11 @@ export const createElement = (element: FormElement, type: string) => {
       ...newElement.properties.validation,
       required: newElement.properties.validation?.required || false,
     };
-    return newElement;
+    return filterElementPropertiesByType(newElement);
   }
 
   if (isTextField(type as FormElementTypes)) {
-    return updateTextElement(newElement, type as ElementType);
+    return filterElementPropertiesByType(updateTextElement(newElement, type as ElementType));
   }
 
   if (type === FormElementTypes.attestation) {
@@ -154,7 +239,14 @@ export const createElement = (element: FormElement, type: string) => {
     };
   }
 
+  if (type === FormElementTypes.starRating) {
+    newElement.properties = {
+      ...newElement.properties,
+      ...starRatingDefaultElementProperties,
+    };
+  }
+
   newElement.type = type as FormElementTypes;
 
-  return newElement;
+  return filterElementPropertiesByType(newElement);
 };

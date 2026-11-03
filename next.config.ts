@@ -1,24 +1,19 @@
 import type { NextConfig } from "next";
+import { allowedOrigin } from "./lib/origin";
 
 const nextConfig: NextConfig = {
   deploymentId: process.env.NEXT_DEPLOYMENT_ID ?? "local",
   reactCompiler: {
     compilationMode: "annotation",
   },
-  cacheComponents: false,
+  cacheComponents: true,
+  partialPrefetching: false,
   sassOptions: {
     includePaths: ["./styles"],
   },
   poweredByHeader: false,
-  compiler: {
-    // Remove all console.* calls
-    // removeConsole: false,
-  },
   output: process.env.NEXT_OUTPUT_STANDALONE === "true" ? "standalone" : undefined,
-  ...(process.env.LAMBDA_ENV && {
-    cacheHandler: "./nextCacheHandler.ts",
-    cacheMaxMemorySize: 0, // disable default in-memory caching
-  }),
+
   async headers() {
     return [
       {
@@ -67,9 +62,11 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["@aws-sdk/lib-dynamodb", "pino", "@opentelemetry/sdk-node", "recheck"],
   experimental: {
+    agentUpgrade: "latest",
     serverActions: {
       // Note: this matches values in constants.ts
       bodySizeLimit: "10mb",
+      allowedOrigins: allowedOrigin ? [allowedOrigin] : [],
     },
   },
   typedRoutes: true,

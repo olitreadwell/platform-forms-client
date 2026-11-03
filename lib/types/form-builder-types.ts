@@ -41,6 +41,9 @@ export const LocalizedElementProperties = {
   DESCRIPTION: "description",
   PLACEHOLDER: "placeholder",
   EXIT_URL: "exitUrl",
+  ROW_TITLE: "rowTitle",
+  ADD_BUTTON_TEXT: "addButtonText",
+  REMOVE_BUTTON_TEXT: "removeButtonText",
 } as const;
 export type LocalizedElementProperties =
   (typeof LocalizedElementProperties)[keyof typeof LocalizedElementProperties];
@@ -50,11 +53,7 @@ export interface LocalizedProperty {
 }
 
 export type publishRequiredFields =
-  | "title"
-  | "questions"
-  | "privacyPolicy"
-  | "confirmationMessage"
-  | "translate";
+  "title" | "questions" | "privacyPolicy" | "confirmationMessage" | "translate";
 
 export interface ElementOption {
   id:
@@ -126,6 +125,7 @@ export const FormServerErrorCodes = {
   DOWNLOAD_LIMIT_EXCEEDED: "RS07",
   DOWNLOAD_RETRIEVE_SUBMISSIONS: "RS08",
   NO_RESPONSES_FOUND: "RS09",
+  DOWNLOAD_ZIP_SIZE_LIMIT_REACHED: "RS10",
   JSON_PARSE: "560",
   FORM_RESUME_DEFAULT: "FR00",
   FORM_RESUME_NO_TARGET: "FR01",

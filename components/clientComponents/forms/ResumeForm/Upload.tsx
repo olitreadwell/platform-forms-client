@@ -15,6 +15,7 @@ import { ErrorResuming } from "./ErrorResuming";
 import { ErrorLoading } from "./ErrorLoading";
 import { useLogClient } from "@lib/hooks/LogClient/useLogClient";
 import { ResumeUploadIcon } from "@serverComponents/icons/ResumeUploadIcon";
+import { copyObjectExcludingFileContent } from "@lib/fileExtractor";
 
 // Prevent prototype pollution in JSON.parse https://stackoverflow.com/a/63927372
 const cleaner = (key: string, value: string) =>
@@ -23,8 +24,8 @@ const cleaner = (key: string, value: string) =>
 type ResumeFormResponse = {
   id: string;
   values: FormValues;
-  history: string[];
   currentGroup: string;
+  responseLanguage: string;
 };
 
 type PendingMismatchResume = Omit<ResumeFormResponse, "id"> & {
@@ -67,8 +68,24 @@ export const Upload = ({ formId }: { formId: string }) => {
 
   useEffect(() => clearDragResetTimeout, []);
 
-  const restoreProgress = async ({ id, values, history, currentGroup }: ResumeFormResponse) => {
-    await saveSessionProgress({ id, values, history, currentGroup, language, restoredForm: true });
+  const restoreProgress = async ({
+    id,
+    values,
+    currentGroup,
+    responseLanguage,
+  }: ResumeFormResponse) => {
+    const { formValuesWithoutFileContent } = copyObjectExcludingFileContent(values, {}, true);
+
+    await saveSessionProgress({
+      id,
+      values: formValuesWithoutFileContent as FormValues,
+      currentGroup,
+      language: responseLanguage,
+      restoredForm: true,
+    });
+    // Needed to support a hard refresh of the page and not client side routing
+
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = `/${language}/id/${id}`;
   };
 
@@ -81,8 +98,8 @@ export const Upload = ({ formId }: { formId: string }) => {
     await restoreProgress({
       id: pendingMismatchResume.sourceFormId,
       values: pendingMismatchResume.values,
-      history: pendingMismatchResume.history,
       currentGroup: pendingMismatchResume.currentGroup,
+      responseLanguage: pendingMismatchResume.responseLanguage,
     });
     setPendingMismatchResume(null);
   };
@@ -120,6 +137,7 @@ export const Upload = ({ formId }: { formId: string }) => {
           errorCode = FormServerErrorCodes.FORM_RESUME_NO_ELEMENT;
           throw new Error(errorCode);
         }
+        const documentLang = htmlDoc.documentElement.lang;
 
         const jsonData = htmlDoc.getElementById("form-data")?.textContent;
 
@@ -151,7 +169,7 @@ export const Upload = ({ formId }: { formId: string }) => {
           throw new Error(errorCode);
         }
 
-        if (!parsed.values || !parsed.history || !parsed.currentGroup) {
+        if (!parsed.values || !parsed.currentGroup) {
           errorCode = FormServerErrorCodes.FORM_RESUME_INVALID_DATA;
           throw new Error(errorCode);
         }
@@ -161,13 +179,13 @@ export const Upload = ({ formId }: { formId: string }) => {
           setPendingMismatchResume({
             sourceFormId: id,
             values: parsed.values,
-            history: parsed.history,
             currentGroup: parsed.currentGroup,
+            responseLanguage: documentLang,
           });
           return;
         }
 
-        await restoreProgress(parsed);
+        await restoreProgress({ ...parsed, responseLanguage: documentLang });
       } catch (e) {
         const timestamp = Date.now();
 
@@ -248,7 +266,7 @@ export const Upload = ({ formId }: { formId: string }) => {
             aria-label={t("saveAndResume.resumePage.upload.title")}
             aria-describedby="resume-upload-description"
             aria-pressed={isDragActive}
-            className={`group focus:border-gcds-blue-vivid focus:bg-gcds-blue-vivid focus:text-white-default focus:outline-gcds-blue-vivid active:outline-gcds-blue-vivid mb-8 flex h-auto min-h-50 w-full flex-col items-center justify-center rounded-3xl border-3 border-dashed text-left transition-all duration-150 outline-none hover:cursor-pointer focus:cursor-pointer focus:outline-[3px] focus:outline-offset-2 active:outline-[3px] active:outline-offset-2 ${
+            className={`group focus:border-white-default focus:bg-gcds-blue-vivid focus:text-white-default focus:outline-gcds-blue-vivid active:outline-gcds-blue-vivid mb-8 flex h-auto min-h-50 w-full flex-col items-center justify-center rounded-3xl border-3 border-dashed text-left transition-all duration-150 outline-none hover:cursor-pointer focus:cursor-pointer focus:outline-[3px] focus:outline-offset-2 active:outline-[3px] active:outline-offset-2 ${
               isDragActive
                 ? "border-indigo-700 bg-violet-200"
                 : "border-indigo-500 bg-violet-50 hover:border-indigo-700 hover:bg-violet-200"

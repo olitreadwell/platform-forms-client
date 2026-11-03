@@ -52,8 +52,8 @@
       "email": "Responses get sent to:",
       "vault": "Responses page"
     },
-    "draftVersion": "Draft - version {{draftVersionNumber}}",
-    "versionNumber": "- version {{publishedVersionNumber}}",
+    "draftVersion": "Version {{draftVersionNumber}} - Draft",
+    "versionNumber": "Version {{publishedVersionNumber}} - ",
     "menu": {
       "more": "More",
       "save": "Download copy",
@@ -69,7 +69,8 @@
       "cloneSuccess": "Form was duplicated.",
       "cloneFailed": "Form could not be duplicated.",
       "ariaLabel": "Menu for form {{name}}",
-      "createDraftVersion": "Edit published form"
+      "createDraftVersion": "Edit published form",
+      "deleteDraftVersion": "Delete draft version"
     },
     "actionRequired": "Responses overdue",
     "editLock": {
@@ -133,17 +134,8 @@
   "continueReadOnly": "Continue to form",
   "archivedNotice": "You can access archived forms for 30 days.",
   "archivedNotice2": "After that, forms will be permanently deleted.",
-  "coEditingHelp": {
-    "title": "Co-editing forms",
-    "step1": "Select form",
-    "step2": "Manage access",
-    "step3": "Add team members",
-    "descriptionStart": "Forms being edited will be available for",
-    "descriptionBold": "one person to edit at a time",
-    "descriptionEnd": "."
-  },
   "updatePublishedHelp": {
-    "title": "New feature:",
+    "title": "New:",
     "descriptionBold": "Update a form after publication",
     "step1": "Beside the name of the published form, select the three vertical dots.",
     "step2": "Choose \"Edit published form\" and follow the prompts.",

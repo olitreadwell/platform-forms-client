@@ -106,14 +106,6 @@
   "title-full": "Formulaires GC - GC Forms",
   "title": "Formulaires GC",
   "loading": "Nous traitons votre soumission de formulaire. Veuillez patienter.",
-  "spam-error": {
-    "error-part-1": "Impossible d'utiliser le bouton avant",
-    "error-part-2": "secondes de délai.",
-    "prompt-part-1": "Réessayez dans",
-    "prompt-part-2": "secondes.",
-    "success-message": "Le bouton est prêt à être utilisé.",
-    "success-prompt": "Vous pouvez maintenant réessayer le bouton."
-  },
   "adminNav": {
     "dashboard": "Accueil",
     "formbuilder": "Générateur de formulaires",
@@ -255,7 +247,9 @@
     "type4": "Retraite de livraison par courriel",
     "message4": "Les formulaires publiés ne sont pas affectés. Les nouveaux formulaires n’auront pas l’option de livraison par courriel. <a href='https://articles.alpha.canada.ca/forms-formulaires/fr/obtenir-les-reponses-aux-formulaires/' className='text-white hover:text-white'>En savoir plus</a>",
     "type5": "Prenez une minute pour nous aider",
-    "message5": "Testez une fonctionnalité à venir qui améliorera la récupération des réponses : <a href='/fr/forms/browser-check' target='_blank' className='text-white hover:text-white'>Vérifiez votre navigateur</a>"
+    "message5": "Testez une fonctionnalité à venir qui améliorera la récupération des réponses : <a href='/fr/forms/browser-check' target='_blank' className='text-white hover:text-white'>Vérifiez votre navigateur</a>",
+    "type6": "Améliorer Formulaires GC",
+    "message6": "Aidez nous à façonner l’expérience de connexion : <a href='https://forms-formulaires.alpha.canada.ca/fr/id/cmuyb8xgz00vb01ud8ducczg5' target='_blank' className='text-white hover:text-white'>Participer</a>"
   },
   "closingNotice": {
     "title": "Fermeture du formulaire",
@@ -295,7 +289,7 @@
     "resumePage": {
       "upload": {
         "title": "Téléversez vos réponses sauvegardées",
-        "description": "Si vous aviez joint des fichiers à votre formulaire, vous pourriez devoir les téléverser à nouveau."
+        "description": "Si vous aviez joint des fichiers à votre formulaire, vous devez les téléverser à nouveau."
       },
       "mismatchedForm": {
         "title": "Souhaitez-vous poursuivre le formulaire avec ces réponses?",
@@ -306,7 +300,7 @@
         "continue": "Continuer quand même"
       },
       "restart": {
-        "title": "Commencez un nouveau formulaire",
+        "title": "Commencez le formulaire à nouveau",
         "description": "Remplissez un nouveau formulaire"
       },
       "readyToContinue": {
@@ -314,7 +308,7 @@
         "intro": "Pour les questions auxquelles vous avez déjà répondu :",
         "text1": "1. Trouvez la copie sauvegardé sur votre appareil",
         "text2": "2. Téléversez-la pour intégrer vos réponses dans le formulaire",
-        "text3": "3. Vérifiez si vous devez joindre à nouveau certains documents, car il se peut qu’ils ne soient pas téléversés avec vos réponses.",
+        "text3": "3. Joignez à nouveau tous les documents, car ils ne seront pas téléversés avec vos réponses.",
         "text4": "4. Continuer à remplir le formulaire."
       }
     },
@@ -392,7 +386,8 @@
   },
   "starRating": {
     "starLabel_one": "{{count}} étoile",
-    "starLabel_other": "{{count}} étoiles"
+    "starLabel_other": "{{count}} étoiles",
+    "outOf": "{{value}} sur {{numberOfStars}}"
   },
   "loginPilot": {
     "title": "Se connecter à Formulaires GC",

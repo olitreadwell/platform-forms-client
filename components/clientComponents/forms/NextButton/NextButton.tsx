@@ -12,13 +12,13 @@ import { Language } from "@lib/types/form-builder-types";
 import { getLocalizedProperty } from "@lib/utils";
 import { showReviewPage } from "@lib/utils/form-builder/showReviewPage";
 import { ga, focusHeadingBySelector } from "@lib/client/clientHelpers";
-import { useFormDelay } from "@lib/hooks/useFormDelayContext";
 import { ForwardArrowIcon24x24 } from "@serverComponents/icons";
 import { isFormClosed } from "app/(gcforms)/[locale]/(form filler)/id/[...props]/actions";
 import { useRouter } from "next/navigation";
 import { formHasGroups } from "@root/lib/utils/form-builder/formHasGroups";
 import { showReviewPage as hasReviewPage } from "@lib/utils/form-builder/showReviewPage";
 import { LOCKED_GROUPS } from "@formBuilder/components/shared/right-panel/headless-treeview/constants";
+import { EventKeys, useCustomEvent } from "@lib/hooks/useCustomEvent";
 
 export const NextButton = ({
   validateForm,
@@ -34,9 +34,9 @@ export const NextButton = ({
   saveAndResumeEnabled?: boolean;
 }) => {
   const { currentGroup, hasNextAction, handleNextAction, isOffBoardSection } = useGCFormsContext();
-  const { updateFormDelay } = useFormDelay();
   const { t } = useTranslation("form-builder");
   const router = useRouter();
+  const { Event } = useCustomEvent();
 
   const checkIfFormClosed = async () => {
     if (await isFormClosed(formRecord.id)) {
@@ -121,18 +121,22 @@ export const NextButton = ({
           checkIfFormClosed();
 
           if (await handleValidation()) {
-            updateFormDelay(formRecord.form, currentGroup);
             handleNextAction();
             focusHeadingBySelector("form h2");
+          } else {
+            Event.fire(EventKeys.continueValidationError);
           }
         }}
         dataTestId="nextButton"
+        // Override the button label to ensure the label is announced once to screen readers (AT)
+        // Otherwise above the laptop breakpoint would announce Continue twice - both the text and SVG title
+        aria-label={t("next", { lng: language })}
       >
         {!saveAndResumeEnabled ? (
           t("next", { lng: language })
         ) : (
           <>
-            <span className="hidden laptop:block">{t("next", { lng: language })}</span>
+            <span className="laptop:block hidden">{t("next", { lng: language })}</span>
             <ForwardArrowIcon24x24 className="fill-white" title={t("next", { lng: language })} />
           </>
         )}

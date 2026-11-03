@@ -1,19 +1,24 @@
 import { getPublicTemplateByID } from "@lib/templates/queries/getPublicTemplateByID";
 import { dateHasPast } from "@lib/utils";
-import { getLocalizedProperty } from "@lib/utils";
+import { getLocalizedProperty, LocalizedElementProperties, Language } from "@lib/utils";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import FormDisplayLayout from "@clientComponents/globals/layouts/FormDisplayLayout";
 import { GCFormsProvider } from "@lib/hooks/useGCFormContext";
 import { PageContent } from "./pageContent";
-import { allowGrouping } from "@lib/groups/utils/allowGrouping";
 import { serverTranslation } from "@i18n";
 import { headers } from "next/headers";
 import { Footer } from "@serverComponents/globals/Footer";
 import { Suspense } from "react";
+import { getAppSettingAsBoolean } from "@lib/appSettings";
+
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
 
 export async function generateMetadata(props0: {
-  params: Promise<{ locale: string; props: string[] }>;
+  params: Promise<{ locale: Language; props: string[] }>;
 }): Promise<Metadata> {
   const params = await props0.params;
 
@@ -28,7 +33,7 @@ export async function generateMetadata(props0: {
 
   // Update the browser title so AT users know they are on the confirmation page
   const title = `${step === "confirmation" ? t("confirmationPage") + ": " : ""}${
-    publicForm.form[getLocalizedProperty("title", locale)]
+    publicForm.form[getLocalizedProperty(LocalizedElementProperties.TITLE, locale)]
   }`;
 
   return {
@@ -37,7 +42,7 @@ export async function generateMetadata(props0: {
 }
 
 export default async function Page(props0: {
-  params: Promise<{ locale: string; props: string[] }>;
+  params: Promise<{ locale: Language; props: string[] }>;
 }) {
   const pathname = (await headers()).get("x-path") ?? "";
   const params = await props0.params;
@@ -59,8 +64,9 @@ export default async function Page(props0: {
   }
 
   const language = locale as "en" | "fr";
-  const formTitle = formRecord.form[getLocalizedProperty("title", language)] as string;
-  const isAllowGrouping = allowGrouping();
+  const formTitle = formRecord.form[
+    getLocalizedProperty(LocalizedElementProperties.TITLE, language)
+  ] as string;
 
   let isPastClosingDate = false;
   if (formRecord.closingDate) {
@@ -72,6 +78,8 @@ export default async function Page(props0: {
   const footer = (
     <Footer className="mt-4" disableGcBranding={formRecord?.form.brand?.disableGcBranding} />
   );
+
+  const hCaptchaEnabledSetting: boolean = await getAppSettingAsBoolean("hCaptchaEnabledSetting");
 
   return (
     <Suspense>
@@ -86,7 +94,7 @@ export default async function Page(props0: {
         saveAndResume={saveAndResume}
         footer={footer}
       >
-        <GCFormsProvider formRecord={formRecord}>
+        <GCFormsProvider formRecord={formRecord} hCaptchaEnabledSetting={hCaptchaEnabledSetting}>
           <PageContent
             formRecord={formRecord}
             language={language}
@@ -95,7 +103,6 @@ export default async function Page(props0: {
             step={step}
             formId={formId}
             saveAndResume={saveAndResume}
-            isAllowGrouping={isAllowGrouping}
           />
         </GCFormsProvider>
       </FormDisplayLayout>

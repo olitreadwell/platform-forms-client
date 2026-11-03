@@ -72,6 +72,15 @@ export const getAddressFieldLabel = (
 };
 
 export const getAddressAsString = (address: AddressElements, split?: boolean): string => {
+  if (
+    address.streetAddress === "" &&
+    address.city === "" &&
+    address.province === "" &&
+    address.postalCode === ""
+  ) {
+    return ""; // If all address fields are empty, return an empty string
+  }
+
   if (split) {
     let addressString = "";
     for (const key in address) {
@@ -80,6 +89,18 @@ export const getAddressAsString = (address: AddressElements, split?: boolean): s
     return addressString;
   }
   return `${address.streetAddress}, ${address.city}, ${address.province} ${address.postalCode} ${address.country}`;
+};
+
+export const getAddressCompleteResponse = (answer: unknown, split?: boolean): string => {
+  try {
+    const addressObject =
+      typeof answer === "string"
+        ? (JSON.parse(answer) as AddressElements)
+        : (answer as AddressElements);
+    return getAddressAsString(addressObject, split);
+  } catch (e) {
+    return answer as string;
+  }
 };
 
 export const getAddressAsReviewElements = (

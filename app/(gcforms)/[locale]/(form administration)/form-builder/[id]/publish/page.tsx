@@ -8,8 +8,13 @@ import { Language } from "@lib/types/form-builder-types";
 import { cn } from "@lib/utils";
 import { PublishCard } from "./components/PublishCard";
 import { PublishInfo } from "./components/PublishInfo";
-import { getTemplateVersionState } from "@lib/templates/versioning/queries/getTemplateVersionState";
+import { getTemplateVersionState } from "@lib/templates/queries/getTemplateVersionState";
 import { redirect } from "next/navigation";
+
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
 
 export async function generateMetadata(props: {
   params: Promise<{ locale: string }>;

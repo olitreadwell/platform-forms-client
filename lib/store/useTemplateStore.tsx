@@ -204,7 +204,7 @@ const createTemplateStore = (
                   }
                 });
               }
-              return JSON.stringify(getSchemaFromState(get(), get().allowGroupsFlag), null, 2);
+              return JSON.stringify(getSchemaFromState(get()), null, 2);
             },
             getId: () => get().id,
             getIsPublished: () => get().isPublished,
@@ -214,7 +214,6 @@ const createTemplateStore = (
             getName: getName(set, get),
             getDeliveryOption: () => get().deliveryOption,
             getSecurityAttribute: () => get().securityAttribute,
-            getGroupsEnabled: () => get().allowGroupsFlag,
             setChangeKey: (key: string) => set({ changeKey: key }),
             setHasHydrated: () => set({ hasHydrated: true }),
             setId: (id) => set({ id }),
@@ -256,8 +255,43 @@ export const TemplateStoreProvider = ({
   children,
   ...props
 }: React.PropsWithChildren<Partial<TemplateStoreProps>>) => {
-  const { getFlag } = useFeatureFlags();
   const { t } = useTranslation("form-builder");
+
+  return (
+    <TemplateStoreErrorBoundary betaErrorMessage={t("beta.loadingError")}>
+      <TemplateStoreProviderContent {...props}>{children}</TemplateStoreProviderContent>
+    </TemplateStoreErrorBoundary>
+  );
+};
+
+class TemplateStoreErrorBoundary extends React.Component<
+  React.PropsWithChildren<{ betaErrorMessage: string }>,
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error instanceof BetaComponentsError) {
+      return <ErrorPanel>{this.props.betaErrorMessage}</ErrorPanel>;
+    }
+
+    if (this.state.error) {
+      throw this.state.error;
+    }
+
+    return this.props.children;
+  }
+}
+
+const TemplateStoreProviderContent = ({
+  children,
+  ...props
+}: React.PropsWithChildren<Partial<TemplateStoreProps>>) => {
+  const { getFlag } = useFeatureFlags();
 
   // Initialize store once on first mount only (empty dependency array)
   const store = useMemo(() => {
@@ -326,23 +360,15 @@ export const TemplateStoreProvider = ({
     }
   }, [store]);
 
-  try {
-    return (
-      <TemplateStoreContext.Provider value={store}>
-        <FlowRefProvider>
-          <TreeRefProvider>
-            <OnlyRenderOnceHydrated>{children}</OnlyRenderOnceHydrated>
-          </TreeRefProvider>
-        </FlowRefProvider>
-      </TemplateStoreContext.Provider>
-    );
-  } catch (e) {
-    if (e instanceof BetaComponentsError) {
-      return <ErrorPanel>{t("beta.loadingError")}</ErrorPanel>;
-    } else {
-      throw e;
-    }
-  }
+  return (
+    <TemplateStoreContext.Provider value={store}>
+      <FlowRefProvider>
+        <TreeRefProvider>
+          <OnlyRenderOnceHydrated>{children}</OnlyRenderOnceHydrated>
+        </TreeRefProvider>
+      </FlowRefProvider>
+    </TemplateStoreContext.Provider>
+  );
 };
 
 export const useTemplateStore = <T,>(

@@ -1,15 +1,10 @@
 import { prisma, prismaErrors } from "@gcforms/database";
 import { FormProperties } from "@lib/types";
+import { jsonToFormProperties } from "../internal";
 import { authorization } from "@lib/privileges";
 import { AuditLogAccessDeniedDetails, logEvent } from "@lib/auditLogs";
-import { isTemplateVersioningEnabled } from "../versioning/internal";
-import { getFormJSONConfig as getFormJSONConfigVersioningEnabled } from "../versioning/queries/getFormJSONConfig";
 
-export const getFormJSONConfig = async (formId: string) => {
-  if (await isTemplateVersioningEnabled()) {
-    return getFormJSONConfigVersioningEnabled(formId);
-  }
-
+export const getFormJSONConfig = async (formId: string): Promise<FormProperties> => {
   await authorization.canEditForm(formId).catch((e) => {
     logEvent(
       e.user.id,
@@ -23,7 +18,19 @@ export const getFormJSONConfig = async (formId: string) => {
   const result = await prisma.template
     .findUnique({
       where: { id: formId },
-      select: { jsonConfig: true },
+      select: {
+        jsonConfig: true,
+        currentDraftVersion: {
+          select: {
+            jsonConfig: true,
+          },
+        },
+        currentPublishedVersion: {
+          select: {
+            jsonConfig: true,
+          },
+        },
+      },
     })
     .catch((e) => prismaErrors(e, null));
 
@@ -31,15 +38,14 @@ export const getFormJSONConfig = async (formId: string) => {
     throw new Error(`Template not found when getting jsonConfig with formId ${formId}`);
   }
 
-  let jsonConfig: FormProperties;
-  const raw = result.jsonConfig;
+  const raw =
+    result.currentDraftVersion?.jsonConfig ??
+    result.currentPublishedVersion?.jsonConfig ??
+    result.jsonConfig;
 
   if (typeof raw === "string") {
-    // Only parse if (unexpectedly) stored as a string
-    jsonConfig = JSON.parse(raw) as FormProperties;
-  } else {
-    jsonConfig = raw as FormProperties;
+    return JSON.parse(raw) as FormProperties;
   }
 
-  return jsonConfig;
+  return jsonToFormProperties(raw);
 };

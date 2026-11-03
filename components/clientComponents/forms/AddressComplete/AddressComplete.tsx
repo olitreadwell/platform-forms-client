@@ -21,19 +21,17 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import debounce from "lodash/debounce";
 import { useTranslation } from "@i18n/client";
 import { useField } from "formik";
-import { cn } from "@lib/utils";
+import { cn, safeJSONParse } from "@lib/utils";
+import { getDescribedByIds, getErrorMessageId } from "@lib/a11yHelpers";
 import { Language } from "@lib/types/form-builder-types";
 import { countries } from "@lib/managedData/countries";
-import { useFeatureFlags } from "@lib/hooks/useFeatureFlags";
 import { isValidAddressSubFieldInvalid, getAddressSubFieldError } from "@gcforms/core";
 import {
   MIN_ADDRESS_SEARCH_LENGTH,
   MAX_SEARCH_QUERY_LENGTH,
   MAX_ADDRESS_FIELD_LENGTH,
   MAX_POSTAL_CODE_LENGTH,
-  normalizeAddressField,
   normalizeQuery,
-  normalizePostalCode,
 } from "./utils";
 
 interface ManagedComboboxRef {
@@ -77,30 +75,34 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
   const provinceError = getAddressSubFieldError(meta.error, "province");
   const postalError = getAddressSubFieldError(meta.error, "postalCode");
 
-  // Check if addressComplete is allowed.
-  const { getFlag } = useFeatureFlags();
-  const featureFlags = {
-    addressComplete: getFlag("addressComplete"),
-  };
+  const streetErrorId = getErrorMessageId(`${name}-streetAddress`);
+  const cityErrorId = getErrorMessageId(`${name}-city`);
+  const provinceErrorId = getErrorMessageId(`${name}-province`);
+  const postalErrorId = getErrorMessageId(`${name}-postal`);
+  const streetDescribedBy = getDescribedByIds(
+    streetError ? streetErrorId : undefined,
+    `desc-${name}-streetDesc`
+  );
 
+  // Check if addressComplete is allowed, do not allow in preview mode.
   const isNoAuthPreviewMode = useMemo(() => window.location.href.includes("/0000/"), []);
 
-  const allowAddressComplete = featureFlags.addressComplete && !isNoAuthPreviewMode;
+  const allowAddressComplete = !isNoAuthPreviewMode;
+
+  const defaultAddressObject = {
+    streetAddress: "",
+    city: "",
+    province: "",
+    postalCode: "",
+    // Make sure the initial default is CAN to avoid null cases when:
+    // - the address is "Canada only"
+    // - the address is not "Canada only" and the country drop down was not interacted with
+    country: "Canada",
+  };
 
   //Form fillers address elements
   const [addressObject, setAddressObject] = useState<AddressElements>(
-    field.value
-      ? JSON.parse(field.value)
-      : {
-          streetAddress: "",
-          city: "",
-          province: "",
-          postalCode: "",
-          // Make sure the initial default is CAN to avoid null cases when:
-          // - the address is "Canada only"
-          // - the address is not "Canada only" and the country drop down was not interacted with
-          country: "Canada",
-        }
+    field.value ? safeJSONParse(field.value) || defaultAddressObject : defaultAddressObject
   );
 
   // Update the field value when the address object changes
@@ -280,9 +282,8 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
 
     for (const internalKey in baseAddressObject) {
       if (key === internalKey) {
-        const sanitizedValue =
-          key === "postalCode" ? normalizePostalCode(value) : normalizeAddressField(value);
-        const newAddressObject = { ...baseAddressObject, [key]: sanitizedValue };
+        const maxLength = key === "postalCode" ? MAX_POSTAL_CODE_LENGTH : MAX_ADDRESS_FIELD_LENGTH;
+        const newAddressObject = { ...baseAddressObject, [key]: value.slice(0, maxLength) };
         setAddressObject(newAddressObject as AddressElements);
       }
     }
@@ -340,7 +341,7 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
           {label}
         </legend>
 
-        {ariaDescribedBy && <Description id={`${id}`}>{ariaDescribedBy}</Description>}
+        {ariaDescribedBy && <Description id={id}>{ariaDescribedBy}</Description>}
 
         {props.canadianOnly && (
           <div>
@@ -352,8 +353,8 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
             <Label
               htmlFor={`${name}-country`}
               id={`label-${name}-country`}
-              className={props.required ? "gcds-label required" : "gcds-label"}
-              required={props.required}
+              className={required ? "gcds-label required" : "gcds-label"}
+              required={required}
               lang={lang}
             >
               {t("addElementDialog.addressComplete.country")}
@@ -367,7 +368,7 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
                 isValidAddressSubFieldInvalid(meta.error, "country") && "gc-error-input"
               )}
               overrideError={countryError}
-              required={props.required}
+              required={required}
               baseValue={countryBaseValue}
               useFilter={true}
               data-testid="addresscomplete-input-country"
@@ -379,8 +380,8 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
           <Label
             htmlFor={`${name}-streetAddress`}
             id={`label-${name}-streetAddress`}
-            className={props.required ? "gcds-label required" : "gcds-label"}
-            required={props.required}
+            className={required ? "gcds-label required" : "gcds-label"}
+            required={required}
             lang={lang}
           >
             {t("addElementDialog.addressComplete.street.label")}
@@ -399,8 +400,8 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
                 onChange={onAddressSearch}
                 onSetValue={onAddressSet}
                 baseValue={addressObject.streetAddress}
-                required={props.required}
-                ariaDescribedBy={`${name}-streetDesc ${name}-streetDesc-2`}
+                required={required}
+                ariaDescribedBy={`desc-${name}-streetDesc`}
                 maxLength={MAX_SEARCH_QUERY_LENGTH}
                 className={cn(
                   isValidAddressSubFieldInvalid(meta.error, "streetAddress") && "gc-error-input"
@@ -411,7 +412,7 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
           ) : (
             <>
               {isValidAddressSubFieldInvalid(meta.error, "streetAddress") && (
-                <ErrorMessage id={"errorMessage" + `${name}-city`}>{streetError}</ErrorMessage>
+                <ErrorMessage id={streetErrorId}>{streetError}</ErrorMessage>
               )}
               <input
                 type="text"
@@ -424,7 +425,9 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
                   "gc-input-text",
                   isValidAddressSubFieldInvalid(meta.error, "streetAddress") && "gc-error-input"
                 )}
-                required={props.required}
+                aria-required={required ? "true" : undefined}
+                aria-invalid={streetError ? "true" : undefined}
+                aria-describedby={streetDescribedBy}
                 data-testid="addresscomplete-streetAddress-input"
               />
             </>
@@ -433,12 +436,10 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
         </div>
 
         <div className="mb-6">
-          <Label htmlFor={`${name}-city`} className="gcds-label">
+          <Label htmlFor={`${name}-city`} className="gcds-label" required={required}>
             {t("addElementDialog.addressComplete.city")}
           </Label>
-          {cityError && (
-            <ErrorMessage id={"errorMessage" + `${name}-city`}>{cityError}</ErrorMessage>
-          )}
+          {cityError && <ErrorMessage id={cityErrorId}>{cityError}</ErrorMessage>}
           <input
             type="text"
             id={`${name}-city`}
@@ -450,20 +451,20 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
               "gc-input-text",
               isValidAddressSubFieldInvalid(meta.error, "city") && "gc-error-input"
             )}
-            required={props.required}
+            aria-required={required ? "true" : undefined}
+            aria-invalid={cityError ? "true" : undefined}
+            aria-describedby={cityError ? cityErrorId : undefined}
             data-testid="addresscomplete-input-city"
           />
         </div>
 
         <div className="mb-6">
-          <Label htmlFor={`${name}-province`} className="gcds-label">
+          <Label htmlFor={`${name}-province`} className="gcds-label" required={required}>
             {props.canadianOnly && t("addElementDialog.addressComplete.components.province")}
             {!props.canadianOnly &&
               t("addElementDialog.addressComplete.components.provinceOrState")}
           </Label>
-          {provinceError && (
-            <ErrorMessage id={"errorMessage" + `${name}-province`}>{provinceError}</ErrorMessage>
-          )}
+          {provinceError && <ErrorMessage id={provinceErrorId}>{provinceError}</ErrorMessage>}
           <input
             type="text"
             id={`${name}-province`}
@@ -475,20 +476,20 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
               "gc-input-text",
               isValidAddressSubFieldInvalid(meta.error, "province") && "gc-error-input"
             )}
-            required={required}
+            aria-required={required ? "true" : undefined}
+            aria-invalid={provinceError ? "true" : undefined}
+            aria-describedby={provinceError ? provinceErrorId : undefined}
             data-testid="addresscomplete-input-province"
           />
         </div>
 
         <div className="mb-6">
-          <Label htmlFor={`${name}-postal`} className="gcds-label">
+          <Label htmlFor={`${name}-postal`} className="gcds-label" required={required}>
             {props.canadianOnly && t("addElementDialog.addressComplete.components.postalCode")}
             {!props.canadianOnly &&
               t("addElementDialog.addressComplete.components.postalCodeOrZip")}
           </Label>
-          {postalError && (
-            <ErrorMessage id={"errorMessage" + `${name}-postal`}>{postalError}</ErrorMessage>
-          )}
+          {postalError && <ErrorMessage id={postalErrorId}>{postalError}</ErrorMessage>}
           <input
             id={`${name}-postal`}
             type="text"
@@ -500,7 +501,9 @@ export const AddressComplete = (props: AddressCompleteProps): React.ReactElement
               "gc-input-text",
               isValidAddressSubFieldInvalid(meta.error, "postalCode") && "gc-error-input"
             )}
-            required={required}
+            aria-required={required ? "true" : undefined}
+            aria-invalid={postalError ? "true" : undefined}
+            aria-describedby={postalError ? postalErrorId : undefined}
             data-testid="addresscomplete-input-postalCode"
           />
         </div>

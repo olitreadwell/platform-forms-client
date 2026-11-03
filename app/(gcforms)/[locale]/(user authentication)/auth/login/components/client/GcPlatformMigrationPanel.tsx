@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LinkButton } from "@serverComponents/globals/Buttons/LinkButton";
 import { GC_PLATFORM_LOGIN_HINT_COOKIE, GC_PLATFORM_LOGIN_HINT_VALUE } from "@root/constants";
 import { parseCookie } from "cookie";
 import { usePathname } from "next/navigation";
@@ -12,14 +11,14 @@ import { FeatureFlags } from "@lib/cache/types";
 
 import { PlatformSignInLogo } from "./PlatformSignInLogo";
 import { GcPlatformSignInButton } from "./GcPlatformSignInButton";
-
-import { filterZitadelUrl } from "@lib/utils/filterZitadelUrl";
+import { GcPlatformRegisterButton } from "./GcPlatformRegisterButton";
 
 type GcPlatformMigrationPanelProps = {
   locale: string;
+  showPanel: boolean;
 };
 
-export const GcPlatformMigrationPanel = ({ locale }: GcPlatformMigrationPanelProps) => {
+export const GcPlatformMigrationPanel = ({ locale, showPanel }: GcPlatformMigrationPanelProps) => {
   const pathname = usePathname();
   const { getFlag } = useFeatureFlags();
   const [hasMounted, setHasMounted] = useState(false);
@@ -32,9 +31,6 @@ export const GcPlatformMigrationPanel = ({ locale }: GcPlatformMigrationPanelPro
   const isLoginPage = pathname === `/${locale}/auth/login`;
   const isZitadelLoginEnabled = getFlag(FeatureFlags.zitadelLogin);
 
-  const baseUrl = filterZitadelUrl(process.env.NEXT_PUBLIC_ZITADEL_URL ?? "");
-  const beforeYouStartUrl = `${baseUrl}/ui/v2/before-you-start`;
-
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mount gate prevents a server/client render mismatch
     setHasMounted(true);
@@ -45,7 +41,13 @@ export const GcPlatformMigrationPanel = ({ locale }: GcPlatformMigrationPanelPro
     );
   }, []);
 
-  if (!hasMounted || !isLoginPage || !isZitadelLoginEnabled || hasGcPlatformLoginHint) {
+  if (
+    !hasMounted ||
+    !showPanel ||
+    !isLoginPage ||
+    !isZitadelLoginEnabled ||
+    hasGcPlatformLoginHint
+  ) {
     return null;
   }
 
@@ -74,9 +76,7 @@ export const GcPlatformMigrationPanel = ({ locale }: GcPlatformMigrationPanelPro
           />
         </p>
         <div className="mb-4">
-          <LinkButton.Primary href={beforeYouStartUrl} target="_blank">
-            {t("migrationPanel.createAccount")}
-          </LinkButton.Primary>
+          <GcPlatformRegisterButton locale={language} label={t("migrationPanel.createAccount")} />
         </div>
       </div>
       <GcPlatformSignInButton locale={language} label={t("migrationPanel.signInWithGcPlatform")} />

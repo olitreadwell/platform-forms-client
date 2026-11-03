@@ -7,8 +7,12 @@ import { SaveTemplateProvider } from "@lib/hooks/form-builder/useTemplateContext
 import { SkipLink } from "@serverComponents/globals/SkipLink";
 import { Footer } from "@serverComponents/globals/Footer";
 import { TemplateStoreProvider } from "@lib/store/useTemplateStore";
-import { allowGrouping } from "@lib/groups/utils/allowGrouping";
 import { authorization } from "@root/lib/privileges";
+
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
 
 export async function generateMetadata(props: {
   params: Promise<{ locale: string }>;
@@ -30,12 +34,10 @@ export default async function StartPage(props: { params: Promise<{ locale: strin
 
   const { locale } = params;
 
-  const allowGroupsFlag = allowGrouping();
-
   const publishFormsEnabled = await authorization.hasPublishFormsPrivilege().catch(() => false);
 
   return (
-    <TemplateStoreProvider {...{ locale, allowGroupsFlag }}>
+    <TemplateStoreProvider {...{ locale }}>
       <SaveTemplateProvider>
         <div className="bg-gray-soft flex h-full flex-col">
           <SkipLink />
@@ -43,10 +45,11 @@ export default async function StartPage(props: { params: Promise<{ locale: strin
             className="mb-0"
             showAccountMenu
             accountMenuPublishingEnabled={publishFormsEnabled}
+            skipLink={false}
           />
           <div className="shrink-0 grow basis-auto">
             <div className="flex flex-row gap-10">
-              <main id="content" className={cn("form-builder mt-5 mb-10 w-full")}>
+              <main id="content" className={cn("form-builder mt-5 mb-10 w-full")} tabIndex={-1}>
                 <Start />
               </main>
             </div>

@@ -5,6 +5,11 @@ import { SkipLink } from "@serverComponents/globals/SkipLink";
 import { type Language } from "@lib/types/form-builder-types";
 import { headers } from "next/headers";
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 export default async function Layout(props: {
   children: React.ReactNode;
   params: Promise<{ locale: string }>;
@@ -16,9 +21,11 @@ export default async function Layout(props: {
   return (
     <div className="gcds-page flex h-full flex-col bg-white">
       <SkipLink />
-      <GcdsHeader language={locale as Language} pathname={pathname} />
-      <div className="container-xl mx-auto px-[var(--gcds-spacing-225)] tablet:px-[var(--gcds-spacing-600)] laptop:px-0">
-        <main id="content">{children}</main>
+      <GcdsHeader language={locale as Language} pathname={pathname} skipLink={false} />
+      <div className="container-xl tablet:px-[var(--gcds-spacing-600)] laptop:px-0 mx-auto px-[var(--gcds-spacing-225)]">
+        <main id="content" tabIndex={-1}>
+          {children}
+        </main>
       </div>
       <Footer isSplashPage={true} />
     </div>

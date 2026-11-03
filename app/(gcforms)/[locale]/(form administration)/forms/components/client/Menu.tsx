@@ -8,7 +8,6 @@ import { clearTemplateStorage } from "@lib/store/utils";
 import { useCallback, useState, useMemo } from "react";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { toast, ToastContainer } from "@formBuilder/components/shared/Toast";
-import { useFeatureFlags } from "@lib/hooks/useFeatureFlags";
 import {
   MenuDropdown,
   MenuDropdownItemCallback,
@@ -16,12 +15,14 @@ import {
 } from "./MenuDropdown/MenuDropdown";
 import { FormTabStatus, TAB_STATUS } from "../types";
 import { EventKeys } from "@root/lib/hooks/useCustomEvent";
+import { useRouter } from "next/navigation";
 
 export const Menu = ({
   id,
   name,
   isPublished,
   hasDraft,
+  currentDraftVersion,
   ttl,
   status,
   deliveryOption,
@@ -31,6 +32,7 @@ export const Menu = ({
   name: string;
   isPublished: boolean;
   hasDraft?: boolean;
+  currentDraftVersion?: number | null;
   ttl?: Date;
   status: FormTabStatus;
   deliveryOption?: { emailAddress: string } | null;
@@ -40,12 +42,14 @@ export const Menu = ({
     t,
     i18n: { language },
   } = useTranslation("my-forms");
+  const router = useRouter();
   const [showConfirm, setShowConfirm] = useState<boolean>(false);
 
   const isEmailDelivery = deliveryOption && deliveryOption.emailAddress;
-
-  const { getFlag } = useFeatureFlags();
-  const templateVersioningEnabled = getFlag("templateVersioning");
+  const isPublishedDraft =
+    (status === TAB_STATUS.DRAFT || status === TAB_STATUS.RECENTLY_EDITED) &&
+    isPublished &&
+    hasDraft;
 
   const handleDelete = useCallback(() => {
     setShowConfirm(true);
@@ -109,6 +113,7 @@ export const Menu = ({
           toast.error(t("errors.formUnarchiveFailed"));
         } else {
           clearTemplateStorage(id);
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- force a full page reload after restoring
           window.location.href = `/${language}/form-builder/${id}/edit`;
         }
       } catch (e) {
@@ -117,7 +122,7 @@ export const Menu = ({
     })();
     return { message: "" };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language, id]);
+  }, [language, id, router]);
 
   const unfilteredMenuItemList = useMemo(
     () => [
@@ -129,11 +134,7 @@ export const Menu = ({
       },
       {
         filtered:
-          templateVersioningEnabled &&
-          !isEmailDelivery &&
-          status !== TAB_STATUS.ARCHIVED &&
-          isPublished &&
-          !hasDraft
+          !isEmailDelivery && status !== TAB_STATUS.ARCHIVED && isPublished && !hasDraft
             ? false
             : true,
         title: t("card.menu.createDraftVersion"),
@@ -169,6 +170,7 @@ export const Menu = ({
               const res = await cloneForm(id, status === TAB_STATUS.ARCHIVED, language);
               if (res && res.formRecord && !res.error) {
                 toast.success(t("card.menu.cloneSuccess"));
+                // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- force a full page reload after cloning
                 window.location.href = `/${language}/form-builder/${res.formRecord.id}/edit`;
                 return;
               }
@@ -196,7 +198,7 @@ export const Menu = ({
       },
       {
         filtered: ttl ? true : false,
-        title: t("card.menu.archive"),
+        title: isPublishedDraft ? t("card.menu.deleteDraftVersion") : t("card.menu.archive"),
         callback: () => {
           handleDelete();
           return {
@@ -205,7 +207,7 @@ export const Menu = ({
         },
       },
       {
-        filtered: !ttl ? true : false,
+        filtered: !ttl || status === TAB_STATUS.CLOSED,
         title: t("actions.unarchiveForm"),
         callback: restoreFormCallback,
       },
@@ -215,7 +217,6 @@ export const Menu = ({
       ttl,
       t,
       copyLinkCallback,
-      templateVersioningEnabled,
       language,
       id,
       restoreFormCallback,
@@ -225,6 +226,7 @@ export const Menu = ({
       handleDelete,
       hasDraft,
       isEmailDelivery,
+      isPublishedDraft,
     ]
   );
 
@@ -250,6 +252,8 @@ export const Menu = ({
         show={showConfirm}
         id={id}
         isPublished={isPublished}
+        isDraftVersion={isPublishedDraft}
+        draftVersionNumber={currentDraftVersion}
         handleClose={setShowConfirm}
       />
       <div className="sticky top-0">

@@ -1,14 +1,20 @@
 import { createArrayCsvStringifier as createCsvStringifier } from "csv-writer";
 import { FormResponseSubmissions } from "../types";
 import { FormElementTypes } from "@lib/types";
-import { customTranslate } from "@lib/i18nHelpers";
+import { serverTranslation } from "@i18n";
 import { sortByLayout } from "@lib/utils/form-builder";
-import { checkAndformatStarRatingAnswer } from "@root/components/clientComponents/forms/StarRating/utils";
+import { starRatingDefaultElementProperties } from "@clientComponents/forms/StarRating/defaults";
+import { getScoreFromStarRatingObject } from "@clientComponents/forms/StarRating/utils";
 
 const specialChars = ["=", "+", "-", "@"];
 
-export const transform = (formResponseSubmissions: FormResponseSubmissions) => {
-  const { t } = customTranslate("common");
+export const transform = async (
+  formResponseSubmissions: FormResponseSubmissions,
+  options: { includeHeader?: boolean; includeRecords?: boolean } = {}
+) => {
+  const { t: tEn } = await serverTranslation("common", { lang: "en" });
+  const { t: tFr } = await serverTranslation("common", { lang: "fr" });
+
   const { submissions } = formResponseSubmissions;
 
   const richTextElements: FormElementTypes[] = [FormElementTypes.richText];
@@ -19,14 +25,29 @@ export const transform = (formResponseSubmissions: FormResponseSubmissions) => {
   }).filter((element) => !richTextElements.includes(element.type));
 
   const header = sortedElements.map((element) => {
-    return `${element.properties.titleEn}\n${element.properties.titleFr}${
-      element.type === FormElementTypes.formattedDate && element.properties.dateFormat
-        ? "\n" +
-          t(`formattedDate.${element.properties.dateFormat}`, { lng: "en" }) +
-          "/" +
-          t(`formattedDate.${element.properties.dateFormat}`, { lng: "fr" })
-        : ""
-    }`;
+    let columnTitle = `${element.properties.titleEn}\n${element.properties.titleFr}`;
+    if (element.type === FormElementTypes.formattedDate && element.properties.dateFormat) {
+      columnTitle +=
+        "\n" +
+        tEn(`formattedDate.${element.properties.dateFormat}`) +
+        "\n" +
+        tFr(`formattedDate.${element.properties.dateFormat}`);
+    }
+    if (element.type === FormElementTypes.starRating) {
+      const numberOfStars =
+        element.properties.numberOfStars ?? starRatingDefaultElementProperties.numberOfStars;
+      const enRatingRange = tEn("starRating.outOf", {
+        value: "",
+        numberOfStars,
+      }).trim();
+      const frRatingRange = tFr("starRating.outOf", {
+        value: "",
+        numberOfStars,
+      }).trim();
+
+      columnTitle = `${element.properties.titleEn} (${enRatingRange})\n${element.properties.titleFr} (${frRatingRange})`;
+    }
+    return columnTitle;
   });
 
   header.unshift(
@@ -41,54 +62,62 @@ export const transform = (formResponseSubmissions: FormResponseSubmissions) => {
     alwaysQuote: true,
   });
 
-  const records = submissions.map((response) => {
-    const answers = sortedElements.map((element) => {
-      const answer = response.answers.find((answer) => answer.questionId === element.id);
-      if (!answer) {
-        return "-";
-      }
-      if (answer.answer instanceof Array) {
-        return answer.answer
-          .map((answer) =>
-            answer
-              .map((subAnswer) => {
-                let answerText = `${subAnswer.questionEn}\n${subAnswer.questionFr}: ${subAnswer.answer}\n`;
-                if (specialChars.some((char) => answerText.startsWith(char))) {
-                  answerText = `'${answerText}`;
-                }
-                if (answerText == "") {
-                  answerText = "-";
-                }
-                return answerText;
-              })
-              .join("")
-          )
-          .join("\n");
-      }
-      let answerText = answer.answer;
-      const starRatingText = checkAndformatStarRatingAnswer(answer);
-      if (starRatingText !== undefined) {
-        return starRatingText;
-      }
-      if (
-        typeof answerText === "string" &&
-        specialChars.some((char) => answerText.startsWith(char))
-      ) {
-        answerText = `'${answerText}`;
-      }
-      if (answerText == "") {
-        answerText = "-";
-      }
-      return answerText;
-    });
-    return [
-      response.id,
-      new Date(response.createdAt).toISOString(),
-      ...answers,
-      "Receipt codes are in the Official receipt and record of responses\n" +
-        "Les codes de réception sont dans le Reçu et registre officiel des réponses",
-    ];
-  });
+  const records =
+    options.includeRecords === false
+      ? []
+      : submissions.map((response) => {
+          const answers = sortedElements.map((element) => {
+            const answer = response.answers.find((answer) => answer.questionId === element.id);
+            if (!answer) {
+              return "-";
+            }
+            if (answer.answer instanceof Array) {
+              return answer.answer
+                .map((answer) =>
+                  answer
+                    .map((subAnswer) => {
+                      let answerText = `${subAnswer.questionEn}\n${subAnswer.questionFr}: ${subAnswer.answer}\n`;
+                      if (specialChars.some((char) => answerText.startsWith(char))) {
+                        answerText = `'${answerText}`;
+                      }
+                      if (answerText == "") {
+                        answerText = "-";
+                      }
+                      return answerText;
+                    })
+                    .join("")
+                )
+                .join("\n");
+            }
+            let answerText = answer.answer;
 
-  return csvStringifier.getHeaderString() + csvStringifier.stringifyRecords(records);
+            if (element.type === FormElementTypes.starRating) {
+              return getScoreFromStarRatingObject(answer.answer);
+            }
+
+            if (
+              typeof answerText === "string" &&
+              specialChars.some((char) => answerText.startsWith(char))
+            ) {
+              answerText = `'${answerText}`;
+            }
+            if (answerText == "") {
+              answerText = "-";
+            }
+            return answerText;
+          });
+          return [
+            response.id,
+            new Date(response.createdAt).toISOString(),
+            ...answers,
+            "Receipt codes are in the Official receipt and record of responses\n" +
+              "Les codes de réception sont dans le Reçu et registre officiel des réponses",
+          ];
+        });
+
+  const headerString = options.includeHeader === false ? "" : csvStringifier.getHeaderString();
+  const responseRecords =
+    options.includeRecords === false ? "" : csvStringifier.stringifyRecords(records);
+
+  return headerString + responseRecords;
 };

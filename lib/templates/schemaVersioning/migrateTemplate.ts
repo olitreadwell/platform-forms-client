@@ -1,0 +1,59 @@
+import { type FormProperties } from "@gcforms/types";
+import { logMessage } from "@lib/logger";
+import { CURRENT_TEMPLATE_VERSION, migrations as defaultMigrations } from "./migrations";
+import { type TemplateMigration } from "./migrations/types";
+
+// Missing schemaVersion is not a special case, it's implicitly version 0.
+export const getTemplateSchemaVersion = (template: FormProperties): number =>
+  template.schemaVersion ?? 0;
+
+/**
+ * Migrates a template's jsonConfig up to the target version by applying
+ * registered migrations in sequence. Callers are responsible for only
+ * invoking this on the builder/draft side, never on published templates.
+ */
+export const migrateTemplate = (
+  template: FormProperties,
+  options: {
+    migrations?: Record<number, TemplateMigration>;
+    targetVersion?: number;
+  } = {}
+): FormProperties => {
+  const { migrations = defaultMigrations, targetVersion = CURRENT_TEMPLATE_VERSION } = options;
+
+  let migrated = template;
+  let version = getTemplateSchemaVersion(migrated);
+
+  if (version > targetVersion) {
+    return migrated;
+  }
+
+  while (version < targetVersion) {
+    // migrations is keyed by the version it upgrades TO, e.g. migrations[1] takes version 0 to 1.
+    const migrate = migrations[version + 1];
+    if (!migrate) {
+      throw new Error(`No migration registered to upgrade template from version ${version}`);
+    }
+
+    const previousVersionTemplate = structuredClone(migrated);
+    try {
+      const nextTemplate = migrate(structuredClone(migrated));
+      const nextVersion = getTemplateSchemaVersion(nextTemplate);
+      if (nextVersion <= version) {
+        throw new Error(`Migration from version ${version} did not advance the template version`);
+      }
+      migrated = nextTemplate;
+      version = nextVersion;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      logMessage.warn(
+        `[templates][migrateTemplate] Migration from schema version ${version} to ${
+          version + 1
+        } failed; keeping version ${version}: ${reason}`
+      );
+      return previousVersionTemplate;
+    }
+  }
+
+  return { ...migrated, schemaVersion: targetVersion };
+};
